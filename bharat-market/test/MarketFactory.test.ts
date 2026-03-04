@@ -32,7 +32,7 @@ describe("MarketFactory", function () {
       owner.account.address
     ]);
 
-    // Deploy Factory
+    // Deploy MarketFactory
     factory = await viem.deployContract("MarketFactory", [
       usdc.address,
       feeVault.address,
@@ -48,18 +48,17 @@ describe("MarketFactory", function () {
   it("Should create a new market", async function () {
 
     const block = await publicClient.getBlock();
-
     const endTime = block.timestamp + 3600n;
 
-    // Mint USDC to user
+    // Give user funds
     await usdc.write.mint([
       user1.account.address,
       100n * ONE_USDC
     ]);
 
-    // Approve creation fee
+    // Approve factory to spend creation fee
     await usdc.write.approve(
-      [factory.address, 10n * ONE_USDC],
+      [factory.address, 100n * ONE_USDC],
       { account: user1.account }
     );
 
@@ -81,16 +80,15 @@ describe("MarketFactory", function () {
   it("Should track markets created by user", async function () {
 
     const block = await publicClient.getBlock();
-
     const endTime = block.timestamp + 3600n;
 
     await usdc.write.mint([
       user1.account.address,
-      100n * ONE_USDC
+      200n * ONE_USDC
     ]);
 
     await usdc.write.approve(
-      [factory.address, 20n * ONE_USDC],
+      [factory.address, 200n * ONE_USDC],
       { account: user1.account }
     );
 
@@ -119,25 +117,26 @@ describe("MarketFactory", function () {
   it("Should return markets using pagination", async function () {
 
     const block = await publicClient.getBlock();
-
     const endTime = block.timestamp + 3600n;
 
     await usdc.write.mint([
       user1.account.address,
-      100n * ONE_USDC
+      300n * ONE_USDC
     ]);
 
     await usdc.write.approve(
-      [factory.address, 50n * ONE_USDC],
+      [factory.address, 300n * ONE_USDC],
       { account: user1.account }
     );
 
     // Create 3 markets
     for (let i = 0; i < 3; i++) {
+
       await factory.write.createMarket(
         [`Market ${i}`, endTime],
         { account: user1.account }
       );
+
     }
 
     const markets = await factory.read.getMarkets([
