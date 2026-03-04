@@ -39,7 +39,7 @@ contract Market is ReentrancyGuard, Ownable {
     event Redeemed(address indexed user, uint256 payout);
 
     event LiquidityAdded(address indexed provider, uint256 amount);
-event LiquidityRemoved(address indexed provider, uint256 amount);
+    event LiquidityRemoved(address indexed provider, uint256 amount);
 
     constructor(
         address _collateralToken,
@@ -95,35 +95,53 @@ event LiquidityRemoved(address indexed provider, uint256 amount);
         return (noPool * 1e18) / (yesPool + noPool);
     }
 
-    // ================================
-    // PREVIEW FUNCTIONS
-    // ================================
+// ================================
+// PREVIEW FUNCTIONS
+// ================================
 
-    function previewBuyYes(
-        uint256 amount
-    ) public view returns (uint256 shares) {
-        uint256 fee = (amount * FEE_PERCENT) / 100;
-        uint256 net = amount - fee;
+function previewBuyYes(
+    uint256 amount
+) public view returns (uint256 shares) {
 
-        uint256 k = yesPool * noPool;
+    uint256 fee = (amount * FEE_PERCENT) / 100;
 
-        uint256 newYes = yesPool + net;
-        uint256 newNo = k / newYes;
+    uint256 protocolFee = fee / 2;
+    uint256 lpFee = fee - protocolFee;
 
-        shares = noPool - newNo;
-    }
+    uint256 net = amount - fee;
 
-    function previewBuyNo(uint256 amount) public view returns (uint256 shares) {
-        uint256 fee = (amount * FEE_PERCENT) / 100;
-        uint256 net = amount - fee;
+    // LP fee stays in pool
+    uint256 effectiveAmount = net + lpFee;
 
-        uint256 k = yesPool * noPool;
+    uint256 k = yesPool * noPool;
 
-        uint256 newNo = noPool + net;
-        uint256 newYes = k / newNo;
+    uint256 newYes = yesPool + effectiveAmount;
+    uint256 newNo = k / newYes;
 
-        shares = yesPool - newYes;
-    }
+    shares = noPool - newNo;
+}
+
+function previewBuyNo(
+    uint256 amount
+) public view returns (uint256 shares) {
+
+    uint256 fee = (amount * FEE_PERCENT) / 100;
+
+    uint256 protocolFee = fee / 2;
+    uint256 lpFee = fee - protocolFee;
+
+    uint256 net = amount - fee;
+
+    // LP fee stays in pool
+    uint256 effectiveAmount = net + lpFee;
+
+    uint256 k = yesPool * noPool;
+
+    uint256 newNo = noPool + effectiveAmount;
+    uint256 newYes = k / newNo;
+
+    shares = yesPool - newYes;
+}
 
     // ================================
     // BUY FUNCTIONS (SLIPPAGE SAFE)
@@ -163,14 +181,27 @@ event LiquidityRemoved(address indexed provider, uint256 amount);
         require(success, "TransferFrom failed");
 
         uint256 fee = (amount * FEE_PERCENT) / 100;
+
+        // split fee
+        uint256 protocolFee = fee / 2;
+        uint256 lpFee = fee - protocolFee;
+
+        // amount that actually moves price
         uint256 netAmount = amount - fee;
 
-        require(collateralToken.transfer(feeVault, fee), "Fee transfer failed");
+        // send protocol fee
+        require(
+            collateralToken.transfer(feeVault, protocolFee),
+            "Protocol fee transfer failed"
+        );
+
+        // LP fee stays in pool
+        uint256 effectiveAmount = netAmount + lpFee;
 
         uint256 k = yesPool * noPool;
 
         if (isYes) {
-            yesPool += netAmount;
+            yesPool += effectiveAmount;
 
             uint256 newNoPool = k / yesPool;
 
@@ -178,7 +209,7 @@ event LiquidityRemoved(address indexed provider, uint256 amount);
 
             yesToken.mint(msg.sender, sharesMinted);
         } else {
-            noPool += netAmount;
+            noPool += effectiveAmount;
 
             uint256 newYesPool = k / noPool;
 
@@ -191,60 +222,57 @@ event LiquidityRemoved(address indexed provider, uint256 amount);
     }
 
     function addLiquidity(uint256 amount) external nonReentrant {
+        require(!resolved, "Market resolved");
+        require(amount > 0, "Invalid amount");
 
-    require(!resolved, "Market resolved");
-    require(amount > 0, "Invalid amount");
+        require(
+            collateralToken.transferFrom(msg.sender, address(this), amount),
+            "Transfer failed"
+        );
 
-    require(
-        collateralToken.transferFrom(msg.sender, address(this), amount),
-        "Transfer failed"
-    );
+        uint256 lpSupply = lpToken.totalSupply();
+        uint256 poolValue = yesPool + noPool;
 
-    uint256 lpSupply = lpToken.totalSupply();
-    uint256 poolValue = yesPool + noPool;
+        uint256 shares;
 
-    uint256 shares;
+        if (lpSupply == 0) {
+            shares = amount;
+        } else {
+            shares = (amount * lpSupply) / poolValue;
+        }
 
-    if (lpSupply == 0) {
-        shares = amount;
-    } else {
-        shares = (amount * lpSupply) / poolValue;
+        uint256 half = amount / 2;
+
+        yesPool += half;
+        noPool += half;
+
+        lpToken.mint(msg.sender, shares);
+
+        emit LiquidityAdded(msg.sender, amount);
     }
 
-    uint256 half = amount / 2;
+    function removeLiquidity(uint256 lpAmount) external nonReentrant {
+        require(lpAmount > 0, "Invalid amount");
 
-    yesPool += half;
-    noPool += half;
+        uint256 lpSupply = lpToken.totalSupply();
 
-    lpToken.mint(msg.sender, shares);
+        uint256 yesShare = (yesPool * lpAmount) / lpSupply;
+        uint256 noShare = (noPool * lpAmount) / lpSupply;
 
-    emit LiquidityAdded(msg.sender, amount);
-}
+        lpToken.burn(msg.sender, lpAmount);
 
+        yesPool -= yesShare;
+        noPool -= noShare;
 
-function removeLiquidity(uint256 lpAmount) external nonReentrant {
+        uint256 payout = yesShare + noShare;
 
-    require(lpAmount > 0, "Invalid amount");
+        require(
+            collateralToken.transfer(msg.sender, payout),
+            "Transfer failed"
+        );
 
-    uint256 lpSupply = lpToken.totalSupply();
-
-    uint256 yesShare = (yesPool * lpAmount) / lpSupply;
-    uint256 noShare = (noPool * lpAmount) / lpSupply;
-
-    lpToken.burn(msg.sender, lpAmount);
-
-    yesPool -= yesShare;
-    noPool -= noShare;
-
-    uint256 payout = yesShare + noShare;
-
-    require(
-        collateralToken.transfer(msg.sender, payout),
-        "Transfer failed"
-    );
-
-    emit LiquidityRemoved(msg.sender, payout);
-}
+        emit LiquidityRemoved(msg.sender, payout);
+    }
 
     // ================================
     // RESOLUTION

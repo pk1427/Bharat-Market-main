@@ -116,6 +116,68 @@ expect(noPool > 0n).to.equal(true);
 
 });
 
+it("LP fee should remain in the pool", async function () {
+
+  await usdc.write.mint([user1.account.address, 1000n * ONE_USDC]);
+
+  await usdc.write.approve(
+    [market.address, 500n * ONE_USDC],
+    { account: user1.account }
+  );
+
+  const beforePool = await market.read.yesPool();
+
+  await market.write.buyYes(
+    [100n * ONE_USDC, 0n],
+    { account: user1.account }
+  );
+
+  const afterPool = await market.read.yesPool();
+
+  expect(afterPool > beforePool).to.equal(true);
+
+});
+
+
+it("Preview should match actual shares minted", async function () {
+
+  await usdc.write.mint([user1.account.address, 1000n * ONE_USDC]);
+
+  await usdc.write.approve(
+    [market.address, 500n * ONE_USDC],
+    { account: user1.account }
+  );
+
+  const preview = await market.read.previewBuyYes([
+    100n * ONE_USDC
+  ]);
+
+  const yesTokenAddress = await market.read.yesToken();
+
+  const yesToken = await hre.viem.getContractAt(
+    "OutcomeToken",
+    yesTokenAddress
+  );
+
+  const before = await yesToken.read.balanceOf([
+    user1.account.address
+  ]);
+
+  await market.write.buyYes(
+    [100n * ONE_USDC, 0n],
+    { account: user1.account }
+  );
+
+  const after = await yesToken.read.balanceOf([
+    user1.account.address
+  ]);
+
+  const received = after - before;
+
+  expect(received).to.equal(preview);
+
+});
+
 
 it("Should revert if slippage exceeds limit", async function () {
 
@@ -143,31 +205,34 @@ it("Should revert if slippage exceeds limit", async function () {
 
 });
 
-  // -------------------------------
-  // TEST 3 — FEE VAULT
-  // -------------------------------
+ // -------------------------------
+// TEST 3 — PROTOCOL FEE
+// -------------------------------
 
-  it("Should collect fees in FeeVault", async function () {
+it("Should send protocol fee to FeeVault", async function () {
 
-    await usdc.write.mint([user1.account.address, 1000n * ONE_USDC]);
+  await usdc.write.mint([user1.account.address, 1000n * ONE_USDC]);
 
-    await usdc.write.approve(
-      [market.address, 500n * ONE_USDC],
-      { account: user1.account }
-    );
+  await usdc.write.approve(
+    [market.address, 500n * ONE_USDC],
+    { account: user1.account }
+  );
 
-    await market.write.buyYes(
-      [100n * ONE_USDC,0n],
-      { account: user1.account }
-    );
+  await market.write.buyYes(
+    [100n * ONE_USDC, 0n],
+    { account: user1.account }
+  );
 
-    const feeBalance = await usdc.read.balanceOf([
-      feeVault.address
-    ]);
+  const feeBalance = await usdc.read.balanceOf([
+    feeVault.address
+  ]);
 
-    expect(feeBalance).to.equal(2n * ONE_USDC);
+  // 2% fee on 100 USDC = 2 USDC
+  // protocol receives half = 1 USDC
 
-  });
+  expect(feeBalance).to.equal(1n * ONE_USDC);
+
+});
 
   // -------------------------------
   // TEST 4 — MARKET RESOLUTION
