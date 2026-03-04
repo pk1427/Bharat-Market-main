@@ -2,7 +2,6 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-// import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
@@ -17,13 +16,23 @@ contract Market is ReentrancyGuard, Ownable {
 
     uint256 public immutable endTime;
 
-    uint256 public totalYes;
-    uint256 public totalNo;
+    // ================================
+    // CPMM POOLS
+    // ================================
+
+    uint256 public yesPool;
+    uint256 public noPool;
+
+    uint256 public constant INITIAL_LIQUIDITY = 1000e6;
 
     bool public resolved;
     uint8 public winningOutcome; // 1 = YES, 2 = NO
 
     uint256 public constant FEE_PERCENT = 2;
+
+    // ================================
+    // EVENTS
+    // ================================
 
     event Bought(
         address indexed user,
@@ -31,8 +40,14 @@ contract Market is ReentrancyGuard, Ownable {
         uint256 amountIn,
         uint256 sharesMinted
     );
+
     event Resolved(uint8 outcome);
+
     event Redeemed(address indexed user, uint256 payout);
+
+    // ================================
+    // CONSTRUCTOR
+    // ================================
 
     constructor(
         address _collateralToken,
@@ -50,6 +65,10 @@ contract Market is ReentrancyGuard, Ownable {
         feeVault = _feeVault;
         endTime = _endTime;
 
+        // Initialize CPMM pools
+        yesPool = INITIAL_LIQUIDITY;
+        noPool = INITIAL_LIQUIDITY;
+
         yesToken = new OutcomeToken(
             string.concat("YES - ", question),
             "YES",
@@ -61,6 +80,22 @@ contract Market is ReentrancyGuard, Ownable {
             "NO",
             address(this)
         );
+    }
+
+    // ================================
+    // CPMM HELPERS
+    // ================================
+
+    function invariant() public view returns (uint256) {
+        return yesPool * noPool;
+    }
+
+    function priceYes() public view returns (uint256) {
+        return (yesPool * 1e18) / (yesPool + noPool);
+    }
+
+    function priceNo() public view returns (uint256) {
+        return (noPool * 1e18) / (yesPool + noPool);
     }
 
     // ================================
@@ -80,30 +115,46 @@ contract Market is ReentrancyGuard, Ownable {
         require(!resolved, "Already resolved");
         require(amount > 0, "Invalid amount");
 
-        // Pull USDC from user
         bool success = collateralToken.transferFrom(
             msg.sender,
             address(this),
             amount
         );
+
         require(success, "TransferFrom failed");
 
         uint256 fee = (amount * FEE_PERCENT) / 100;
         uint256 netAmount = amount - fee;
 
-        // Transfer fee to vault
         require(collateralToken.transfer(feeVault, fee), "Fee transfer failed");
 
-        // Mint shares 1:1 with netAmount
+        uint256 k = yesPool * noPool;
+
+        uint256 sharesMinted;
+
         if (isYes) {
-            yesToken.mint(msg.sender, netAmount);
-            totalYes += netAmount;
+            yesPool += netAmount;
+
+            uint256 newNoPool = k / yesPool;
+
+            sharesMinted = noPool - newNoPool;
+
+            noPool = newNoPool;
+
+            yesToken.mint(msg.sender, sharesMinted);
         } else {
-            noToken.mint(msg.sender, netAmount);
-            totalNo += netAmount;
+            noPool += netAmount;
+
+            uint256 newYesPool = k / noPool;
+
+            sharesMinted = yesPool - newYesPool;
+
+            yesPool = newYesPool;
+
+            noToken.mint(msg.sender, sharesMinted);
         }
 
-        emit Bought(msg.sender, isYes, amount, netAmount);
+        emit Bought(msg.sender, isYes, amount, sharesMinted);
     }
 
     // ================================
@@ -132,15 +183,19 @@ contract Market is ReentrancyGuard, Ownable {
 
         if (winningOutcome == 1) {
             uint256 balance = yesToken.balanceOf(msg.sender);
+
             require(balance > 0, "No winning shares");
 
             payout = balance;
+
             yesToken.burn(msg.sender, balance);
         } else {
             uint256 balance = noToken.balanceOf(msg.sender);
+
             require(balance > 0, "No winning shares");
 
             payout = balance;
+
             noToken.burn(msg.sender, balance);
         }
 

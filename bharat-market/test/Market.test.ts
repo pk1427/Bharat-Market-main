@@ -15,39 +15,39 @@ describe("BharatMarket Prediction Market", function () {
 
   const ONE_USDC = 1_000_000n;
 
- beforeEach(async function () {
+  beforeEach(async function () {
 
-  const { viem } = hre;
+    const { viem } = hre;
 
-  publicClient = await viem.getPublicClient();
-  const walletClients = await viem.getWalletClients();
+    publicClient = await viem.getPublicClient();
+    const walletClients = await viem.getWalletClients();
 
-  owner = walletClients[0];
-  user1 = walletClients[1];
-  user2 = walletClients[2];
+    owner = walletClients[0];
+    user1 = walletClients[1];
+    user2 = walletClients[2];
 
-  // Deploy MockUSDC
-  usdc = await viem.deployContract("MockUSDC");
+    // Deploy MockUSDC
+    usdc = await viem.deployContract("MockUSDC");
 
-  // Deploy FeeVault
-  feeVault = await viem.deployContract("FeeVault", [
-    owner.account.address
-  ]);
+    // Deploy FeeVault
+    feeVault = await viem.deployContract("FeeVault", [
+      owner.account.address
+    ]);
 
-  const block = await publicClient.getBlock();
+    const block = await publicClient.getBlock();
+    const endTime = block.timestamp + 3600n;
 
-  const endTime = block.timestamp + 3600n;
+    // Deploy Market
+    market = await viem.deployContract("Market", [
+      usdc.address,
+      feeVault.address,
+      endTime,
+      "Will CSK win?",
+      owner.account.address
+    ]);
 
-  // Deploy Market
-  market = await viem.deployContract("Market", [
-    usdc.address,
-    feeVault.address,
-    endTime,
-    "Will CSK win?",
-    owner.account.address
-  ]);
+  });
 
-});
   // -------------------------------
   // TEST 1 — USDC MINT
   // -------------------------------
@@ -68,7 +68,7 @@ describe("BharatMarket Prediction Market", function () {
   });
 
   // -------------------------------
-  // TEST 2 — BUY YES / NO
+  // TEST 2 — BUY YES / NO (CPMM)
   // -------------------------------
 
   it("Users should buy YES and NO shares", async function () {
@@ -96,11 +96,17 @@ describe("BharatMarket Prediction Market", function () {
       { account: user2.account }
     );
 
-    const totalYes = await market.read.totalYes();
-    const totalNo = await market.read.totalNo();
+    const yesPool = await market.read.yesPool();
+    const noPool = await market.read.noPool();
 
-    expect(totalYes > 0n).to.equal(true);
-    expect(totalNo > 0n).to.equal(true);
+    expect(yesPool > 0n).to.equal(true);
+    expect(noPool > 0n).to.equal(true);
+
+    const priceYes = await market.read.priceYes();
+    const priceNo = await market.read.priceNo();
+
+    expect(priceYes > 0n).to.equal(true);
+    expect(priceNo > 0n).to.equal(true);
 
   });
 
