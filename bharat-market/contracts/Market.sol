@@ -16,23 +16,15 @@ contract Market is ReentrancyGuard, Ownable {
 
     uint256 public immutable endTime;
 
-    // ================================
-    // CPMM POOLS
-    // ================================
-
     uint256 public yesPool;
     uint256 public noPool;
 
     uint256 public constant INITIAL_LIQUIDITY = 1000e6;
 
     bool public resolved;
-    uint8 public winningOutcome; // 1 = YES, 2 = NO
+    uint8 public winningOutcome;
 
     uint256 public constant FEE_PERCENT = 2;
-
-    // ================================
-    // EVENTS
-    // ================================
 
     event Bought(
         address indexed user,
@@ -40,14 +32,8 @@ contract Market is ReentrancyGuard, Ownable {
         uint256 amountIn,
         uint256 sharesMinted
     );
-
     event Resolved(uint8 outcome);
-
     event Redeemed(address indexed user, uint256 payout);
-
-    // ================================
-    // CONSTRUCTOR
-    // ================================
 
     constructor(
         address _collateralToken,
@@ -65,7 +51,6 @@ contract Market is ReentrancyGuard, Ownable {
         feeVault = _feeVault;
         endTime = _endTime;
 
-        // Initialize CPMM pools
         yesPool = INITIAL_LIQUIDITY;
         noPool = INITIAL_LIQUIDITY;
 
@@ -99,18 +84,60 @@ contract Market is ReentrancyGuard, Ownable {
     }
 
     // ================================
-    // BUY FUNCTIONS
+    // PREVIEW FUNCTIONS
     // ================================
 
-    function buyYes(uint256 amount) external nonReentrant {
-        _buy(amount, true);
+    function previewBuyYes(
+        uint256 amount
+    ) public view returns (uint256 shares) {
+        uint256 fee = (amount * FEE_PERCENT) / 100;
+        uint256 net = amount - fee;
+
+        uint256 k = yesPool * noPool;
+
+        uint256 newYes = yesPool + net;
+        uint256 newNo = k / newYes;
+
+        shares = noPool - newNo;
     }
 
-    function buyNo(uint256 amount) external nonReentrant {
-        _buy(amount, false);
+    function previewBuyNo(uint256 amount) public view returns (uint256 shares) {
+        uint256 fee = (amount * FEE_PERCENT) / 100;
+        uint256 net = amount - fee;
+
+        uint256 k = yesPool * noPool;
+
+        uint256 newNo = noPool + net;
+        uint256 newYes = k / newNo;
+
+        shares = yesPool - newYes;
     }
 
-    function _buy(uint256 amount, bool isYes) internal {
+    // ================================
+    // BUY FUNCTIONS (SLIPPAGE SAFE)
+    // ================================
+
+    function buyYes(uint256 amount, uint256 minShares) external nonReentrant {
+        uint256 shares = previewBuyYes(amount);
+
+        require(shares >= minShares, "Slippage exceeded");
+
+        _executeBuy(amount, true, shares);
+    }
+
+    function buyNo(uint256 amount, uint256 minShares) external nonReentrant {
+        uint256 shares = previewBuyNo(amount);
+
+        require(shares >= minShares, "Slippage exceeded");
+
+        _executeBuy(amount, false, shares);
+    }
+
+    function _executeBuy(
+        uint256 amount,
+        bool isYes,
+        uint256 sharesMinted
+    ) internal {
         require(block.timestamp < endTime, "Market closed");
         require(!resolved, "Already resolved");
         require(amount > 0, "Invalid amount");
@@ -130,14 +157,10 @@ contract Market is ReentrancyGuard, Ownable {
 
         uint256 k = yesPool * noPool;
 
-        uint256 sharesMinted;
-
         if (isYes) {
             yesPool += netAmount;
 
             uint256 newNoPool = k / yesPool;
-
-            sharesMinted = noPool - newNoPool;
 
             noPool = newNoPool;
 
@@ -146,8 +169,6 @@ contract Market is ReentrancyGuard, Ownable {
             noPool += netAmount;
 
             uint256 newYesPool = k / noPool;
-
-            sharesMinted = yesPool - newYesPool;
 
             yesPool = newYesPool;
 
