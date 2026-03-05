@@ -13,6 +13,8 @@ contract MarketFactory is Ownable {
     address public immutable collateralToken;
     address public immutable feeVault;
 
+    address public oracle;
+
     uint256 public creationFee = 10e6; // 10 USDC (assuming 6 decimals)
 
     address[] public allMarkets;
@@ -37,12 +39,15 @@ contract MarketFactory is Ownable {
     // ================================
 
     constructor(
-        address _collateralToken,
-        address _feeVault,
-        address initialOwner
+      address _collateralToken,
+    address _feeVault,
+    address _oracle,
+    address initialOwner
     ) Ownable(initialOwner) {
         require(_collateralToken != address(0), "Invalid token");
         require(_feeVault != address(0), "Invalid vault");
+        require(_oracle != address(0), "Invalid oracle");
+oracle = _oracle;
 
         collateralToken = _collateralToken;
         feeVault = _feeVault;
@@ -71,13 +76,14 @@ contract MarketFactory is Ownable {
             );
         }
 
-        Market market = new Market(
-            collateralToken,
-            feeVault,
-            endTime,
-            question,
-            msg.sender
-        );
+      Market market = new Market(
+    collateralToken,
+    feeVault,
+    endTime,
+    question,
+    msg.sender,
+    oracle
+);
 
         address marketAddress = address(market);
 

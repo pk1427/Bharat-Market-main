@@ -12,6 +12,8 @@ contract Market is ReentrancyGuard, Ownable {
     IERC20 public immutable collateralToken;
     address public immutable feeVault;
 
+    address public oracle;
+
     OutcomeToken public yesToken;
     OutcomeToken public noToken;
 
@@ -41,17 +43,25 @@ contract Market is ReentrancyGuard, Ownable {
     event LiquidityAdded(address indexed provider, uint256 amount);
     event LiquidityRemoved(address indexed provider, uint256 amount);
 
+    modifier onlyOracle() {
+    require(msg.sender == oracle, "Only oracle");
+    _;
+}
+
     constructor(
         address _collateralToken,
         address _feeVault,
         uint256 _endTime,
         string memory question,
-        address initialOwner
+        address initialOwner,
+        address _oracle
     ) Ownable(initialOwner) {
         require(_collateralToken != address(0), "Invalid token");
         require(_feeVault != address(0), "Invalid vault");
         require(_endTime > block.timestamp, "Invalid end time");
         require(initialOwner != address(0), "Invalid owner");
+        require(_oracle != address(0), "Invalid oracle");
+        oracle = _oracle;
 
         collateralToken = IERC20(_collateralToken);
         feeVault = _feeVault;
@@ -95,53 +105,49 @@ contract Market is ReentrancyGuard, Ownable {
         return (noPool * 1e18) / (yesPool + noPool);
     }
 
-// ================================
-// PREVIEW FUNCTIONS
-// ================================
+    // ================================
+    // PREVIEW FUNCTIONS
+    // ================================
 
-function previewBuyYes(
-    uint256 amount
-) public view returns (uint256 shares) {
+    function previewBuyYes(
+        uint256 amount
+    ) public view returns (uint256 shares) {
+        uint256 fee = (amount * FEE_PERCENT) / 100;
 
-    uint256 fee = (amount * FEE_PERCENT) / 100;
+        uint256 protocolFee = fee / 2;
+        uint256 lpFee = fee - protocolFee;
 
-    uint256 protocolFee = fee / 2;
-    uint256 lpFee = fee - protocolFee;
+        uint256 net = amount - fee;
 
-    uint256 net = amount - fee;
+        // LP fee stays in pool
+        uint256 effectiveAmount = net + lpFee;
 
-    // LP fee stays in pool
-    uint256 effectiveAmount = net + lpFee;
+        uint256 k = yesPool * noPool;
 
-    uint256 k = yesPool * noPool;
+        uint256 newYes = yesPool + effectiveAmount;
+        uint256 newNo = k / newYes;
 
-    uint256 newYes = yesPool + effectiveAmount;
-    uint256 newNo = k / newYes;
+        shares = noPool - newNo;
+    }
 
-    shares = noPool - newNo;
-}
+    function previewBuyNo(uint256 amount) public view returns (uint256 shares) {
+        uint256 fee = (amount * FEE_PERCENT) / 100;
 
-function previewBuyNo(
-    uint256 amount
-) public view returns (uint256 shares) {
+        uint256 protocolFee = fee / 2;
+        uint256 lpFee = fee - protocolFee;
 
-    uint256 fee = (amount * FEE_PERCENT) / 100;
+        uint256 net = amount - fee;
 
-    uint256 protocolFee = fee / 2;
-    uint256 lpFee = fee - protocolFee;
+        // LP fee stays in pool
+        uint256 effectiveAmount = net + lpFee;
 
-    uint256 net = amount - fee;
+        uint256 k = yesPool * noPool;
 
-    // LP fee stays in pool
-    uint256 effectiveAmount = net + lpFee;
+        uint256 newNo = noPool + effectiveAmount;
+        uint256 newYes = k / newNo;
 
-    uint256 k = yesPool * noPool;
-
-    uint256 newNo = noPool + effectiveAmount;
-    uint256 newYes = k / newNo;
-
-    shares = yesPool - newYes;
-}
+        shares = yesPool - newYes;
+    }
 
     // ================================
     // BUY FUNCTIONS (SLIPPAGE SAFE)
@@ -278,16 +284,16 @@ function previewBuyNo(
     // RESOLUTION
     // ================================
 
-    function resolve(uint8 outcome) external onlyOwner {
-        require(block.timestamp >= endTime, "Too early");
-        require(!resolved, "Already resolved");
-        require(outcome == 1 || outcome == 2, "Invalid outcome");
+function resolveFromOracle(uint8 outcome) external onlyOracle {
+    require(block.timestamp >= endTime, "Too early");
+    require(!resolved, "Already resolved");
+    require(outcome == 1 || outcome == 2, "Invalid outcome");
 
-        resolved = true;
-        winningOutcome = outcome;
+    resolved = true;
+    winningOutcome = outcome;
 
-        emit Resolved(outcome);
-    }
+    emit Resolved(outcome);
+}
 
     // ================================
     // REDEEM
@@ -320,4 +326,9 @@ function previewBuyNo(
 
         emit Redeemed(msg.sender, payout);
     }
+
+    function updateOracle(address newOracle) external onlyOwner {
+    require(newOracle != address(0), "Invalid oracle");
+    oracle = newOracle;
+}
 }

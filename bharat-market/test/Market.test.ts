@@ -12,10 +12,10 @@ describe("BharatMarket Prediction Market", function () {
   let usdc: any;
   let market: any;
   let feeVault: any;
+  let oracle: any;
 
   const ONE_USDC = 1_000_000n;
-
- beforeEach(async function () {
+beforeEach(async function () {
 
   const { viem } = hre;
 
@@ -34,8 +34,10 @@ describe("BharatMarket Prediction Market", function () {
     owner.account.address
   ]);
 
-  const block = await publicClient.getBlock();
+  // Deploy Oracle
+  oracle = await viem.deployContract("MarketOracle");
 
+  const block = await publicClient.getBlock();
   const endTime = block.timestamp + 3600n;
 
   // Deploy Market
@@ -44,7 +46,8 @@ describe("BharatMarket Prediction Market", function () {
     feeVault.address,
     endTime,
     "Will CSK win?",
-    owner.account.address
+    owner.account.address,
+    oracle.address
   ]);
 
 });
@@ -255,11 +258,10 @@ it("Should send protocol fee to FeeVault", async function () {
     await hre.network.provider.send("evm_increaseTime", [4000]);
     await hre.network.provider.send("evm_mine");
 
-    await market.write.resolve(
-      [1],
-      { account: owner.account }
-    );
-
+await oracle.write.resolveMarket(
+  [market.address, 1],
+  { account: owner.account }
+);
     const resolved = await market.read.resolved();
 
     expect(resolved).to.equal(true);
@@ -287,10 +289,10 @@ it("Should send protocol fee to FeeVault", async function () {
     await hre.network.provider.send("evm_increaseTime", [4000]);
     await hre.network.provider.send("evm_mine");
 
-    await market.write.resolve(
-      [1],
-      { account: owner.account }
-    );
+await oracle.write.resolveMarket(
+  [market.address, 1],
+  { account: owner.account }
+);
 
     const before = await usdc.read.balanceOf([
       user1.account.address
@@ -341,10 +343,10 @@ it("Should send protocol fee to FeeVault", async function () {
     await hre.network.provider.send("evm_increaseTime", [4000]);
     await hre.network.provider.send("evm_mine");
 
-    await market.write.resolve(
-      [1],
-      { account: owner.account }
-    );
+  await oracle.write.resolveMarket(
+  [market.address, 1],
+  { account: owner.account }
+);
 
     let failed = false;
 

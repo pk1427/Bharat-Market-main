@@ -12,6 +12,8 @@ describe("MarketFactory", function () {
   let feeVault: any;
   let factory: any;
 
+  let oracle: any;
+
   const ONE_USDC = 1_000_000n;
 
   beforeEach(async function () {
@@ -32,12 +34,16 @@ describe("MarketFactory", function () {
       owner.account.address
     ]);
 
-    // Deploy MarketFactory
-    factory = await viem.deployContract("MarketFactory", [
-      usdc.address,
-      feeVault.address,
-      owner.account.address
-    ]);
+    // Deploy Oracle
+oracle = await viem.deployContract("MarketOracle");
+
+//deploy Factory
+   factory = await viem.deployContract("MarketFactory", [
+  usdc.address,
+  feeVault.address,
+  oracle.address,
+  owner.account.address
+]);
 
   });
 

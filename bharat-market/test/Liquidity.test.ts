@@ -12,41 +12,45 @@ describe("Market Liquidity", function () {
   let usdc: any;
   let market: any;
   let feeVault: any;
+  let oracle: any;
 
   const ONE_USDC = 1_000_000n;
+beforeEach(async function () {
 
-  beforeEach(async function () {
+  const { viem } = hre;
 
-    const { viem } = hre;
+  publicClient = await viem.getPublicClient();
+  const walletClients = await viem.getWalletClients();
 
-    publicClient = await viem.getPublicClient();
-    const walletClients = await viem.getWalletClients();
+  owner = walletClients[0];
+  user1 = walletClients[1];
+  user2 = walletClients[2];
 
-    owner = walletClients[0];
-    user1 = walletClients[1];
-    user2 = walletClients[2];
+  // Deploy MockUSDC
+  usdc = await viem.deployContract("MockUSDC");
 
-    // Deploy MockUSDC
-    usdc = await viem.deployContract("MockUSDC");
+  // Deploy FeeVault
+  feeVault = await viem.deployContract("FeeVault", [
+    owner.account.address
+  ]);
 
-    // Deploy FeeVault
-    feeVault = await viem.deployContract("FeeVault", [
-      owner.account.address
-    ]);
+  // 🔥 DEPLOY ORACLE (missing step)
+  oracle = await viem.deployContract("MarketOracle");
 
-    const block = await publicClient.getBlock();
-    const endTime = block.timestamp + 3600n;
+  const block = await publicClient.getBlock();
+  const endTime = block.timestamp + 3600n;
 
-    // Deploy Market
-    market = await viem.deployContract("Market", [
-      usdc.address,
-      feeVault.address,
-      endTime,
-      "Will CSK win?",
-      owner.account.address
-    ]);
+  // Deploy Market
+  market = await viem.deployContract("Market", [
+    usdc.address,
+    feeVault.address,
+    endTime,
+    "Will CSK win?",
+    owner.account.address,
+    oracle.address
+  ]);
 
-  });
+});
 
   // -------------------------------
   // TEST 1 — ADD LIQUIDITY
