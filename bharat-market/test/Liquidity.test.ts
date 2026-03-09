@@ -41,14 +41,16 @@ beforeEach(async function () {
   const endTime = block.timestamp + 3600n;
 
   // Deploy Market
-  market = await viem.deployContract("Market", [
-    usdc.address,
-    feeVault.address,
-    endTime,
-    "Will CSK win?",
-    owner.account.address,
-    oracle.address
-  ]);
+market = await viem.deployContract("Market", [
+  usdc.address,
+  feeVault.address,
+  endTime,
+  "Will CSK win?",
+  owner.account.address,
+  oracle.address,
+  "sports",
+  "csk_vs_mi"
+]);
 
 });
 

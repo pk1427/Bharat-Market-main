@@ -68,10 +68,15 @@ oracle = await viem.deployContract("MarketOracle");
       { account: user1.account }
     );
 
-    await factory.write.createMarket(
-      ["Will BTC hit 100k?", endTime],
-      { account: user1.account }
-    );
+   await factory.write.createMarket(
+  [
+    "Will BTC hit 100k?",
+    endTime,
+    "crypto",
+    "bitcoin_price"
+  ],
+  { account: user1.account }
+);
 
     const total = await factory.read.totalMarkets();
 
@@ -98,15 +103,15 @@ oracle = await viem.deployContract("MarketOracle");
       { account: user1.account }
     );
 
-    await factory.write.createMarket(
-      ["Market 1", endTime],
-      { account: user1.account }
-    );
+   await factory.write.createMarket(
+  ["Market 1", endTime, "crypto", "btc"],
+  { account: user1.account }
+);
 
-    await factory.write.createMarket(
-      ["Market 2", endTime],
-      { account: user1.account }
-    );
+  await factory.write.createMarket(
+  ["Market 2", endTime, "crypto", "eth"],
+  { account: user1.account }
+);
 
     const markets = await factory.read.getMarketsByCreator([
       user1.account.address
@@ -139,9 +144,9 @@ oracle = await viem.deployContract("MarketOracle");
     for (let i = 0; i < 3; i++) {
 
       await factory.write.createMarket(
-        [`Market ${i}`, endTime],
-        { account: user1.account }
-      );
+  [`Market ${i}`, endTime, "crypto", "btc"],
+  { account: user1.account }
+);
 
     }
 

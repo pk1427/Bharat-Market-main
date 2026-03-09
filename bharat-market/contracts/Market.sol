@@ -13,6 +13,8 @@ contract Market is ReentrancyGuard, Ownable {
     address public immutable feeVault;
 
     address public oracle;
+    string public oracleType;
+    string public oracleQuery;
 
     OutcomeToken public yesToken;
     OutcomeToken public noToken;
@@ -44,9 +46,9 @@ contract Market is ReentrancyGuard, Ownable {
     event LiquidityRemoved(address indexed provider, uint256 amount);
 
     modifier onlyOracle() {
-    require(msg.sender == oracle, "Only oracle");
-    _;
-}
+        require(msg.sender == oracle, "Only oracle");
+        _;
+    }
 
     constructor(
         address _collateralToken,
@@ -54,7 +56,9 @@ contract Market is ReentrancyGuard, Ownable {
         uint256 _endTime,
         string memory question,
         address initialOwner,
-        address _oracle
+        address _oracle,
+        string memory _oracleType,
+        string memory _oracleQuery
     ) Ownable(initialOwner) {
         require(_collateralToken != address(0), "Invalid token");
         require(_feeVault != address(0), "Invalid vault");
@@ -62,6 +66,9 @@ contract Market is ReentrancyGuard, Ownable {
         require(initialOwner != address(0), "Invalid owner");
         require(_oracle != address(0), "Invalid oracle");
         oracle = _oracle;
+
+        oracleType = _oracleType;
+        oracleQuery = _oracleQuery;
 
         collateralToken = IERC20(_collateralToken);
         feeVault = _feeVault;
@@ -284,16 +291,16 @@ contract Market is ReentrancyGuard, Ownable {
     // RESOLUTION
     // ================================
 
-function resolveFromOracle(uint8 outcome) external onlyOracle {
-    require(block.timestamp >= endTime, "Too early");
-    require(!resolved, "Already resolved");
-    require(outcome == 1 || outcome == 2, "Invalid outcome");
+    function resolveFromOracle(uint8 outcome) external onlyOracle {
+        require(block.timestamp >= endTime, "Too early");
+        require(!resolved, "Already resolved");
+        require(outcome == 1 || outcome == 2, "Invalid outcome");
 
-    resolved = true;
-    winningOutcome = outcome;
+        resolved = true;
+        winningOutcome = outcome;
 
-    emit Resolved(outcome);
-}
+        emit Resolved(outcome);
+    }
 
     // ================================
     // REDEEM
@@ -328,7 +335,7 @@ function resolveFromOracle(uint8 outcome) external onlyOracle {
     }
 
     function updateOracle(address newOracle) external onlyOwner {
-    require(newOracle != address(0), "Invalid oracle");
-    oracle = newOracle;
-}
+        require(newOracle != address(0), "Invalid oracle");
+        oracle = newOracle;
+    }
 }

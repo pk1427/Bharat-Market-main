@@ -39,15 +39,15 @@ contract MarketFactory is Ownable {
     // ================================
 
     constructor(
-      address _collateralToken,
-    address _feeVault,
-    address _oracle,
-    address initialOwner
+        address _collateralToken,
+        address _feeVault,
+        address _oracle,
+        address initialOwner
     ) Ownable(initialOwner) {
         require(_collateralToken != address(0), "Invalid token");
         require(_feeVault != address(0), "Invalid vault");
         require(_oracle != address(0), "Invalid oracle");
-oracle = _oracle;
+        oracle = _oracle;
 
         collateralToken = _collateralToken;
         feeVault = _feeVault;
@@ -59,7 +59,9 @@ oracle = _oracle;
 
     function createMarket(
         string memory question,
-        uint256 endTime
+        uint256 endTime,
+        string memory oracleType,
+        string memory oracleQuery
     ) external returns (address) {
         require(bytes(question).length > 0, "Question required");
         require(endTime > block.timestamp, "Invalid end time");
@@ -76,14 +78,16 @@ oracle = _oracle;
             );
         }
 
-      Market market = new Market(
-    collateralToken,
-    feeVault,
-    endTime,
-    question,
-    msg.sender,
-    oracle
-);
+        Market market = new Market(
+            collateralToken,
+            feeVault,
+            endTime,
+            question,
+            msg.sender,
+            oracle,
+            oracleType,
+            oracleQuery
+        );
 
         address marketAddress = address(market);
 

@@ -42,13 +42,15 @@ beforeEach(async function () {
 
   // Deploy Market
   market = await viem.deployContract("Market", [
-    usdc.address,
-    feeVault.address,
-    endTime,
-    "Will CSK win?",
-    owner.account.address,
-    oracle.address
-  ]);
+  usdc.address,
+  feeVault.address,
+  endTime,
+  "Will CSK win?",
+  owner.account.address,
+  oracle.address,
+  "sports",
+  "csk_vs_mi"
+]);
 
 });
   // -------------------------------
