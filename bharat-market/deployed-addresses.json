@@ -1,0 +1,10 @@
+{
+  "network": "amoy",
+  "chainId": "80002",
+  "deployer": "0xdE504608441fe32BAE7fceAcF6D04Af61c39D8Ec",
+  "MockUSDC": "0x79Ca0bb1adb03478C5C299fd858ab1Cf0d2264D9",
+  "FeeVault": "0x656FcF1a9579E2574f4CF721430DC3546d338576",
+  "MarketOracle": "0xB514C78225a4A98a77808A68371a6d631B0b46d7",
+  "ChainlinkFunctionsOracle": "0xfaCaeedfEdA97a62A26959FB4b67c3aa2523352d",
+  "MarketFactory": "0xa3ECcDE61C9cc8D575393801cAc1db8e8f8dD4c5"
+}

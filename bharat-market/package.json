@@ -1,10 +1,26 @@
 {
-  "name": "hardhat-project",
+  "name": "bharat-market",
+  "version": "1.0.0",
+  "description": "BharatMarket — Decentralized Prediction Market Protocol",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "deploy:oracle": "hardhat run scripts/deployOracle.ts --network amoy",
+    "deploy:all": "hardhat run scripts/deployAll.ts --network amoy",
+    "resolve": "hardhat run scripts/requestResolution.ts --network amoy",
+    "node": "hardhat node",
+    "clean": "hardhat clean"
+  },
   "devDependencies": {
-    "@nomicfoundation/hardhat-toolbox-viem": "^3.0.0",
-    "hardhat": "^2.28.6"
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@types/node": "^20.0.0",
+    "dotenv": "^16.4.5",
+    "hardhat": "^2.28.6",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5"
   },
   "dependencies": {
+    "@chainlink/contracts": "^1.5.0",
     "@openzeppelin/contracts": "^5.6.1",
     "ethers": "^6.16.0"
   }
