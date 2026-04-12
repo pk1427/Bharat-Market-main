@@ -18,30 +18,63 @@ type CacheFile = {
   >;
 };
 
+declare global {
+  var __bharatMarketCache: CacheFile | undefined;
+}
+
 const cacheDir = path.join(process.cwd(), ".cache");
 const cacheFile = path.join(cacheDir, "market-cache.json");
+const isVercel = process.env.VERCEL === "1";
 
-const emptyCache: CacheFile = {
-  summaries: null,
-  details: {}
-};
+function cloneEmptyCache(): CacheFile {
+  return {
+    summaries: null,
+    details: {}
+  };
+}
+
+function getMemoryCache() {
+  if (!globalThis.__bharatMarketCache) {
+    globalThis.__bharatMarketCache = cloneEmptyCache();
+  }
+
+  return globalThis.__bharatMarketCache;
+}
 
 async function ensureCacheDir() {
   await mkdir(cacheDir, { recursive: true });
 }
 
 export async function readMarketCache() {
+  const memoryCache = getMemoryCache();
+
+  if (isVercel) {
+    return memoryCache;
+  }
+
   try {
     const raw = await readFile(cacheFile, "utf8");
-    return JSON.parse(raw) as CacheFile;
+    const parsed = JSON.parse(raw) as CacheFile;
+    globalThis.__bharatMarketCache = parsed;
+    return parsed;
   } catch {
-    return emptyCache;
+    return memoryCache;
   }
 }
 
 export async function writeMarketCache(cache: CacheFile) {
-  await ensureCacheDir();
-  await writeFile(cacheFile, JSON.stringify(cache, null, 2), "utf8");
+  globalThis.__bharatMarketCache = cache;
+
+  if (isVercel) {
+    return;
+  }
+
+  try {
+    await ensureCacheDir();
+    await writeFile(cacheFile, JSON.stringify(cache, null, 2), "utf8");
+  } catch {
+    // Ignore filesystem cache failures so hosted deployments can still serve live RPC data.
+  }
 }
 
 export async function getCachedSummaries() {
