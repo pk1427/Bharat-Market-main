@@ -1,368 +1,169 @@
 import { expect } from "chai";
-import hre from "hardhat";
+import { ethers } from "hardhat";
 
 describe("BharatMarket Prediction Market", function () {
-
-  let publicClient: any;
-
-  let owner: any;
-  let user1: any;
-  let user2: any;
-
-  let usdc: any;
-  let market: any;
-  let feeVault: any;
-  let oracle: any;
-
   const ONE_USDC = 1_000_000n;
-beforeEach(async function () {
 
-  const { viem } = hre;
+  async function deployFixture() {
+    const [owner, user1, user2] = await ethers.getSigners();
 
-  publicClient = await viem.getPublicClient();
-  const walletClients = await viem.getWalletClients();
+    const usdc = await ethers.deployContract("MockUSDC");
+    await usdc.waitForDeployment();
 
-  owner = walletClients[0];
-  user1 = walletClients[1];
-  user2 = walletClients[2];
+    const feeVault = await ethers.deployContract("FeeVault", [owner.address]);
+    await feeVault.waitForDeployment();
 
-  // Deploy MockUSDC
-  usdc = await viem.deployContract("MockUSDC");
+    const oracle = await ethers.deployContract("MarketOracle");
+    await oracle.waitForDeployment();
 
-  // Deploy FeeVault
-  feeVault = await viem.deployContract("FeeVault", [
-    owner.account.address
-  ]);
+    const latestBlock = await ethers.provider.getBlock("latest");
+    const endTime = BigInt((latestBlock?.timestamp ?? 0) + 3600);
 
-  // Deploy Oracle
-  oracle = await viem.deployContract("MarketOracle");
+    const market = await ethers.deployContract("Market", [
+      await usdc.getAddress(),
+      await feeVault.getAddress(),
+      endTime,
+      "Will CSK win?",
+      owner.address,
+      await oracle.getAddress(),
+      "sports",
+      "csk_vs_mi",
+    ]);
+    await market.waitForDeployment();
 
-  const block = await publicClient.getBlock();
-  const endTime = block.timestamp + 3600n;
-
-  // Deploy Market
-  market = await viem.deployContract("Market", [
-  usdc.address,
-  feeVault.address,
-  endTime,
-  "Will CSK win?",
-  owner.account.address,
-  oracle.address,
-  "sports",
-  "csk_vs_mi"
-]);
-
-});
-  // -------------------------------
-  // TEST 1 — USDC MINT
-  // -------------------------------
+    return { owner, user1, user2, usdc, feeVault, oracle, market };
+  }
 
   it("Should mint USDC to users", async function () {
+    const { user1, usdc } = await deployFixture();
 
-    await usdc.write.mint([
-      user1.account.address,
-      1000n * ONE_USDC
-    ]);
+    await usdc.mint(user1.address, 1000n * ONE_USDC);
 
-    const balance = await usdc.read.balanceOf([
-      user1.account.address
-    ]);
-
-    expect(balance).to.equal(1000n * ONE_USDC);
-
+    expect(await usdc.balanceOf(user1.address)).to.equal(1000n * ONE_USDC);
   });
 
-  // -------------------------------
-  // TEST 2 — BUY YES / NO
-  // -------------------------------
-
   it("Users should buy YES and NO shares", async function () {
+    const { user1, user2, usdc, market } = await deployFixture();
 
-    await usdc.write.mint([user1.account.address, 1000n * ONE_USDC]);
-    await usdc.write.mint([user2.account.address, 1000n * ONE_USDC]);
+    await usdc.mint(user1.address, 1000n * ONE_USDC);
+    await usdc.mint(user2.address, 1000n * ONE_USDC);
 
-    await usdc.write.approve(
-      [market.address, 500n * ONE_USDC],
-      { account: user1.account }
-    );
+    await usdc.connect(user1).approve(await market.getAddress(), 500n * ONE_USDC);
+    await usdc.connect(user2).approve(await market.getAddress(), 500n * ONE_USDC);
 
-    await usdc.write.approve(
-      [market.address, 500n * ONE_USDC],
-      { account: user2.account }
-    );
+    await market.connect(user1).buyYes(100n * ONE_USDC, 0);
+    await market.connect(user2).buyNo(100n * ONE_USDC, 0);
 
-    await market.write.buyYes(
-      [100n * ONE_USDC,0n],
-      { account: user1.account }
-    );
-
-    await market.write.buyNo(
-      [100n * ONE_USDC,0n],
-      { account: user2.account }
-    );
-
-  const yesPool = await market.read.yesPool();
-const noPool = await market.read.noPool();
-
-expect(yesPool > 0n).to.equal(true);
-expect(noPool > 0n).to.equal(true);
-
+    expect(await market.yesPool()).to.be.greaterThan(0n);
+    expect(await market.noPool()).to.be.greaterThan(0n);
   });
 
   it("Preview should return expected shares", async function () {
+    const { market } = await deployFixture();
 
-  await usdc.write.mint([user1.account.address, 1000n * ONE_USDC]);
+    expect(await market.previewBuyYes(100n * ONE_USDC)).to.be.greaterThan(0n);
+  });
 
-  const preview = await market.read.previewBuyYes([
-    100n * ONE_USDC
-  ]);
+  it("LP fee should remain in the pool", async function () {
+    const { user1, usdc, market } = await deployFixture();
 
-  expect(preview > 0n).to.equal(true);
+    await usdc.mint(user1.address, 1000n * ONE_USDC);
+    await usdc.connect(user1).approve(await market.getAddress(), 500n * ONE_USDC);
 
-});
+    const beforePool = await market.yesPool();
+    await market.connect(user1).buyYes(100n * ONE_USDC, 0);
 
-it("LP fee should remain in the pool", async function () {
+    expect(await market.yesPool()).to.be.greaterThan(beforePool);
+  });
 
-  await usdc.write.mint([user1.account.address, 1000n * ONE_USDC]);
+  it("Preview should match actual shares minted", async function () {
+    const { user1, usdc, market } = await deployFixture();
 
-  await usdc.write.approve(
-    [market.address, 500n * ONE_USDC],
-    { account: user1.account }
-  );
+    await usdc.mint(user1.address, 1000n * ONE_USDC);
+    await usdc.connect(user1).approve(await market.getAddress(), 500n * ONE_USDC);
 
-  const beforePool = await market.read.yesPool();
+    const preview = await market.previewBuyYes(100n * ONE_USDC);
+    const yesToken = await ethers.getContractAt("OutcomeToken", await market.yesToken());
 
-  await market.write.buyYes(
-    [100n * ONE_USDC, 0n],
-    { account: user1.account }
-  );
+    const before = await yesToken.balanceOf(user1.address);
+    await market.connect(user1).buyYes(100n * ONE_USDC, 0);
+    const after = await yesToken.balanceOf(user1.address);
 
-  const afterPool = await market.read.yesPool();
+    expect(after - before).to.equal(preview);
+  });
 
-  expect(afterPool > beforePool).to.equal(true);
+  it("Should revert if slippage exceeds limit", async function () {
+    const { user1, usdc, market } = await deployFixture();
 
-});
+    await usdc.mint(user1.address, 1000n * ONE_USDC);
+    await usdc.connect(user1).approve(await market.getAddress(), 500n * ONE_USDC);
 
+    await expect(
+      market.connect(user1).buyYes(100n * ONE_USDC, 999_999_999n)
+    ).to.be.revertedWith("Slippage exceeded");
+  });
 
-it("Preview should match actual shares minted", async function () {
+  it("Should send protocol fee to FeeVault", async function () {
+    const { user1, usdc, feeVault, market } = await deployFixture();
 
-  await usdc.write.mint([user1.account.address, 1000n * ONE_USDC]);
+    await usdc.mint(user1.address, 1000n * ONE_USDC);
+    await usdc.connect(user1).approve(await market.getAddress(), 500n * ONE_USDC);
 
-  await usdc.write.approve(
-    [market.address, 500n * ONE_USDC],
-    { account: user1.account }
-  );
+    await market.connect(user1).buyYes(100n * ONE_USDC, 0);
 
-  const preview = await market.read.previewBuyYes([
-    100n * ONE_USDC
-  ]);
-
-  const yesTokenAddress = await market.read.yesToken();
-
-  const yesToken = await hre.viem.getContractAt(
-    "OutcomeToken",
-    yesTokenAddress
-  );
-
-  const before = await yesToken.read.balanceOf([
-    user1.account.address
-  ]);
-
-  await market.write.buyYes(
-    [100n * ONE_USDC, 0n],
-    { account: user1.account }
-  );
-
-  const after = await yesToken.read.balanceOf([
-    user1.account.address
-  ]);
-
-  const received = after - before;
-
-  expect(received).to.equal(preview);
-
-});
-
-
-it("Should revert if slippage exceeds limit", async function () {
-
-  await usdc.write.mint([user1.account.address, 1000n * ONE_USDC]);
-
-  await usdc.write.approve(
-    [market.address, 500n * ONE_USDC],
-    { account: user1.account }
-  );
-
-  let failed = false;
-
-  try {
-
-    await market.write.buyYes(
-      [100n * ONE_USDC, 999999999n], // impossible slippage
-      { account: user1.account }
-    );
-
-  } catch {
-    failed = true;
-  }
-
-  expect(failed).to.equal(true);
-
-});
-
- // -------------------------------
-// TEST 3 — PROTOCOL FEE
-// -------------------------------
-
-it("Should send protocol fee to FeeVault", async function () {
-
-  await usdc.write.mint([user1.account.address, 1000n * ONE_USDC]);
-
-  await usdc.write.approve(
-    [market.address, 500n * ONE_USDC],
-    { account: user1.account }
-  );
-
-  await market.write.buyYes(
-    [100n * ONE_USDC, 0n],
-    { account: user1.account }
-  );
-
-  const feeBalance = await usdc.read.balanceOf([
-    feeVault.address
-  ]);
-
-  // 2% fee on 100 USDC = 2 USDC
-  // protocol receives half = 1 USDC
-
-  expect(feeBalance).to.equal(1n * ONE_USDC);
-
-});
-
-  // -------------------------------
-  // TEST 4 — MARKET RESOLUTION
-  // -------------------------------
+    expect(await usdc.balanceOf(await feeVault.getAddress())).to.equal(1n * ONE_USDC);
+  });
 
   it("Owner should resolve the market", async function () {
+    const { owner, user1, usdc, oracle, market } = await deployFixture();
 
-    await usdc.write.mint([user1.account.address, 1000n * ONE_USDC]);
+    await usdc.mint(user1.address, 1000n * ONE_USDC);
+    await usdc.connect(user1).approve(await market.getAddress(), 500n * ONE_USDC);
+    await market.connect(user1).buyYes(100n * ONE_USDC, 0);
 
-    await usdc.write.approve(
-      [market.address, 500n * ONE_USDC],
-      { account: user1.account }
-    );
+    await ethers.provider.send("evm_increaseTime", [4000]);
+    await ethers.provider.send("evm_mine", []);
 
-    await market.write.buyYes(
-      [100n * ONE_USDC,0n],
-      { account: user1.account }
-    );
+    await oracle.connect(owner).resolveMarket(await market.getAddress(), 1);
 
-    await hre.network.provider.send("evm_increaseTime", [4000]);
-    await hre.network.provider.send("evm_mine");
-
-await oracle.write.resolveMarket(
-  [market.address, 1],
-  { account: owner.account }
-);
-    const resolved = await market.read.resolved();
-
-    expect(resolved).to.equal(true);
-
+    expect(await market.resolved()).to.equal(true);
   });
-
-  // -------------------------------
-  // TEST 5 — WINNER REDEMPTION
-  // -------------------------------
 
   it("Winning user should redeem payout", async function () {
+    const { owner, user1, usdc, oracle, market } = await deployFixture();
 
-    await usdc.write.mint([user1.account.address, 1000n * ONE_USDC]);
+    await usdc.mint(user1.address, 1000n * ONE_USDC);
+    await usdc.connect(user1).approve(await market.getAddress(), 500n * ONE_USDC);
+    await market.connect(user1).buyYes(100n * ONE_USDC, 0);
 
-    await usdc.write.approve(
-      [market.address, 500n * ONE_USDC],
-      { account: user1.account }
-    );
+    await ethers.provider.send("evm_increaseTime", [4000]);
+    await ethers.provider.send("evm_mine", []);
 
-    await market.write.buyYes(
-      [100n * ONE_USDC,0n],
-      { account: user1.account }
-    );
+    await oracle.connect(owner).resolveMarket(await market.getAddress(), 1);
 
-    await hre.network.provider.send("evm_increaseTime", [4000]);
-    await hre.network.provider.send("evm_mine");
+    const before = await usdc.balanceOf(user1.address);
+    await market.connect(user1).redeem();
 
-await oracle.write.resolveMarket(
-  [market.address, 1],
-  { account: owner.account }
-);
-
-    const before = await usdc.read.balanceOf([
-      user1.account.address
-    ]);
-
-    await market.write.redeem(
-      [],
-      { account: user1.account }
-    );
-
-    const after = await usdc.read.balanceOf([
-      user1.account.address
-    ]);
-
-    expect(after > before).to.equal(true);
-
+    expect(await usdc.balanceOf(user1.address)).to.be.greaterThan(before);
   });
-
-  // -------------------------------
-  // TEST 6 — LOSER REDEEM FAIL
-  // -------------------------------
 
   it("Losing side should not redeem", async function () {
+    const { owner, user1, user2, usdc, oracle, market } = await deployFixture();
 
-    await usdc.write.mint([user1.account.address, 1000n * ONE_USDC]);
-    await usdc.write.mint([user2.account.address, 1000n * ONE_USDC]);
+    await usdc.mint(user1.address, 1000n * ONE_USDC);
+    await usdc.mint(user2.address, 1000n * ONE_USDC);
 
-    await usdc.write.approve(
-      [market.address, 500n * ONE_USDC],
-      { account: user1.account }
-    );
+    await usdc.connect(user1).approve(await market.getAddress(), 500n * ONE_USDC);
+    await usdc.connect(user2).approve(await market.getAddress(), 500n * ONE_USDC);
 
-    await usdc.write.approve(
-      [market.address, 500n * ONE_USDC],
-      { account: user2.account }
-    );
+    await market.connect(user1).buyYes(100n * ONE_USDC, 0);
+    await market.connect(user2).buyNo(100n * ONE_USDC, 0);
 
-    await market.write.buyYes(
-      [100n * ONE_USDC,0n],
-      { account: user1.account }
-    );
+    await ethers.provider.send("evm_increaseTime", [4000]);
+    await ethers.provider.send("evm_mine", []);
 
-    await market.write.buyNo(
-      [100n * ONE_USDC,0n],
-      { account: user2.account }
-    );
+    await oracle.connect(owner).resolveMarket(await market.getAddress(), 1);
 
-    await hre.network.provider.send("evm_increaseTime", [4000]);
-    await hre.network.provider.send("evm_mine");
-
-  await oracle.write.resolveMarket(
-  [market.address, 1],
-  { account: owner.account }
-);
-
-    let failed = false;
-
-    try {
-      await market.write.redeem(
-        [],
-        { account: user2.account }
-      );
-    } catch {
-      failed = true;
-    }
-
-    expect(failed).to.equal(true);
-
+    await expect(market.connect(user2).redeem()).to.be.revertedWith("No winning shares");
   });
-
 });

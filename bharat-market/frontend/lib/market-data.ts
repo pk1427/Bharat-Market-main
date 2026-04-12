@@ -1,0 +1,411 @@
+import type { Address, PublicClient } from "viem";
+import { erc20Abi } from "viem";
+
+import { marketAbi, marketFactoryAbi, outcomeTokenAbi } from "@/lib/abis";
+
+export type MarketStatus = "active" | "awaiting" | "resolved";
+
+export type MarketSummary = {
+  address: Address;
+  question: string;
+  yesProbability: bigint;
+  noProbability: bigint;
+  liquidity: bigint;
+  endTime: bigint;
+  endTimeLabel: string;
+  resolved: boolean;
+  status: MarketStatus;
+  statusLabel: string;
+};
+
+export type MarketDetailData = MarketSummary & {
+  yesPool: bigint;
+  noPool: bigint;
+  yesBalance: bigint;
+  noBalance: bigint;
+  lpBalance: bigint;
+  usdcBalance: bigint;
+  yesToken: Address;
+  noToken: Address;
+  lpToken: Address;
+  oracleType: string;
+  oracleQuery: string;
+  winningOutcome: number;
+  winningLabel: string;
+};
+
+export type MarketSummaryDto = Omit<
+  MarketSummary,
+  "yesProbability" | "noProbability" | "liquidity" | "endTime"
+> & {
+  yesProbability: string;
+  noProbability: string;
+  liquidity: string;
+  endTime: string;
+};
+
+export type MarketDetailDto = Omit<
+  MarketDetailData,
+  | "yesProbability"
+  | "noProbability"
+  | "liquidity"
+  | "endTime"
+  | "yesPool"
+  | "noPool"
+  | "yesBalance"
+  | "noBalance"
+  | "lpBalance"
+  | "usdcBalance"
+> & {
+  yesProbability: string;
+  noProbability: string;
+  liquidity: string;
+  endTime: string;
+  yesPool: string;
+  noPool: string;
+  yesBalance: string;
+  noBalance: string;
+  lpBalance: string;
+  usdcBalance: string;
+};
+
+export async function fetchMarketSummaries(
+  publicClient: PublicClient,
+  marketFactory: Address
+): Promise<MarketSummary[]> {
+  const marketAddresses = await fetchMarketAddresses(publicClient, marketFactory);
+
+  const summaries = await Promise.all(
+    marketAddresses.map(async (marketAddress) => {
+      const [
+        yesProbability,
+        noProbability,
+        yesPool,
+        noPool,
+        resolved,
+        endTime,
+        oracleType,
+        oracleQuery
+      ] =
+        await Promise.all([
+          publicClient.readContract({
+            address: marketAddress,
+            abi: marketAbi,
+            functionName: "priceYes"
+          }),
+          publicClient.readContract({
+            address: marketAddress,
+            abi: marketAbi,
+            functionName: "priceNo"
+          }),
+          publicClient.readContract({
+            address: marketAddress,
+            abi: marketAbi,
+            functionName: "yesPool"
+          }),
+          publicClient.readContract({
+            address: marketAddress,
+            abi: marketAbi,
+            functionName: "noPool"
+          }),
+          publicClient.readContract({
+            address: marketAddress,
+            abi: marketAbi,
+            functionName: "resolved"
+          }),
+          publicClient.readContract({
+            address: marketAddress,
+            abi: marketAbi,
+            functionName: "endTime"
+          }),
+          publicClient.readContract({
+            address: marketAddress,
+            abi: marketAbi,
+            functionName: "oracleType"
+          }),
+          publicClient.readContract({
+            address: marketAddress,
+            abi: marketAbi,
+            functionName: "oracleQuery"
+          })
+        ]);
+
+      const status = getMarketStatus(resolved, endTime);
+      const question = deriveQuestion(oracleType, oracleQuery, marketAddress);
+
+      return {
+        address: marketAddress,
+        question,
+        yesProbability,
+        noProbability,
+        liquidity: yesPool + noPool,
+        endTime,
+        endTimeLabel: getEndTimeLabel(endTime),
+        resolved,
+        status,
+        statusLabel: getStatusLabel(status)
+      };
+    })
+  );
+
+  return summaries.sort((a, b) => Number(b.endTime - a.endTime));
+}
+
+export async function fetchMarketDetail(
+  publicClient: PublicClient,
+  marketFactory: Address,
+  marketAddress: Address,
+  usdcAddress: Address,
+  account?: Address
+): Promise<MarketDetailData> {
+  const [
+    yesProbability,
+    noProbability,
+    yesPool,
+    noPool,
+    resolved,
+    endTime,
+    winningOutcome,
+    oracleType,
+    oracleQuery,
+    yesToken,
+    noToken,
+    lpToken
+  ] = await Promise.all([
+    publicClient.readContract({
+      address: marketAddress,
+      abi: marketAbi,
+      functionName: "priceYes"
+    }),
+    publicClient.readContract({
+      address: marketAddress,
+      abi: marketAbi,
+      functionName: "priceNo"
+    }),
+    publicClient.readContract({
+      address: marketAddress,
+      abi: marketAbi,
+      functionName: "yesPool"
+    }),
+    publicClient.readContract({
+      address: marketAddress,
+      abi: marketAbi,
+      functionName: "noPool"
+    }),
+    publicClient.readContract({
+      address: marketAddress,
+      abi: marketAbi,
+      functionName: "resolved"
+    }),
+    publicClient.readContract({
+      address: marketAddress,
+      abi: marketAbi,
+      functionName: "endTime"
+    }),
+    publicClient.readContract({
+      address: marketAddress,
+      abi: marketAbi,
+      functionName: "winningOutcome"
+    }),
+    publicClient.readContract({
+      address: marketAddress,
+      abi: marketAbi,
+      functionName: "oracleType"
+    }),
+    publicClient.readContract({
+      address: marketAddress,
+      abi: marketAbi,
+      functionName: "oracleQuery"
+    }),
+    publicClient.readContract({
+      address: marketAddress,
+      abi: marketAbi,
+      functionName: "yesToken"
+    }),
+    publicClient.readContract({
+      address: marketAddress,
+      abi: marketAbi,
+      functionName: "noToken"
+    }),
+    publicClient.readContract({
+      address: marketAddress,
+      abi: marketAbi,
+      functionName: "lpToken"
+    })
+  ]);
+
+  const [yesBalance, noBalance, lpBalance, usdcBalance] = account
+    ? await Promise.all([
+        publicClient.readContract({
+          address: yesToken,
+          abi: outcomeTokenAbi,
+          functionName: "balanceOf",
+          args: [account]
+        }),
+        publicClient.readContract({
+          address: noToken,
+          abi: outcomeTokenAbi,
+          functionName: "balanceOf",
+          args: [account]
+        }),
+        publicClient.readContract({
+          address: lpToken,
+          abi: outcomeTokenAbi,
+          functionName: "balanceOf",
+          args: [account]
+        }),
+        publicClient.readContract({
+          address: usdcAddress,
+          abi: erc20Abi,
+          functionName: "balanceOf",
+          args: [account]
+        })
+      ])
+    : [0n, 0n, 0n, 0n];
+
+  const status = getMarketStatus(resolved, endTime);
+
+  return {
+    address: marketAddress,
+    question: deriveQuestion(oracleType, oracleQuery, marketAddress),
+    yesProbability,
+    noProbability,
+    liquidity: yesPool + noPool,
+    endTime,
+    endTimeLabel: getEndTimeLabel(endTime),
+    resolved,
+    status,
+    statusLabel: getStatusLabel(status),
+    yesPool,
+    noPool,
+    yesBalance,
+    noBalance,
+    lpBalance,
+    usdcBalance,
+    yesToken,
+    noToken,
+    lpToken,
+    oracleType,
+    oracleQuery,
+    winningOutcome,
+    winningLabel: winningOutcome === 1 ? "YES" : winningOutcome === 2 ? "NO" : "Pending"
+  };
+}
+
+export function serializeMarketSummary(summary: MarketSummary): MarketSummaryDto {
+  return {
+    ...summary,
+    yesProbability: summary.yesProbability.toString(),
+    noProbability: summary.noProbability.toString(),
+    liquidity: summary.liquidity.toString(),
+    endTime: summary.endTime.toString()
+  };
+}
+
+export function deserializeMarketSummary(summary: MarketSummaryDto): MarketSummary {
+  return {
+    ...summary,
+    yesProbability: BigInt(summary.yesProbability),
+    noProbability: BigInt(summary.noProbability),
+    liquidity: BigInt(summary.liquidity),
+    endTime: BigInt(summary.endTime)
+  };
+}
+
+export function serializeMarketDetail(detail: MarketDetailData): MarketDetailDto {
+  return {
+    ...serializeMarketSummary(detail),
+    yesPool: detail.yesPool.toString(),
+    noPool: detail.noPool.toString(),
+    yesBalance: detail.yesBalance.toString(),
+    noBalance: detail.noBalance.toString(),
+    lpBalance: detail.lpBalance.toString(),
+    usdcBalance: detail.usdcBalance.toString(),
+    yesToken: detail.yesToken,
+    noToken: detail.noToken,
+    lpToken: detail.lpToken,
+    oracleType: detail.oracleType,
+    oracleQuery: detail.oracleQuery,
+    winningOutcome: detail.winningOutcome,
+    winningLabel: detail.winningLabel
+  };
+}
+
+export function deserializeMarketDetail(detail: MarketDetailDto): MarketDetailData {
+  return {
+    ...deserializeMarketSummary(detail),
+    yesPool: BigInt(detail.yesPool),
+    noPool: BigInt(detail.noPool),
+    yesBalance: BigInt(detail.yesBalance),
+    noBalance: BigInt(detail.noBalance),
+    lpBalance: BigInt(detail.lpBalance),
+    usdcBalance: BigInt(detail.usdcBalance),
+    yesToken: detail.yesToken,
+    noToken: detail.noToken,
+    lpToken: detail.lpToken,
+    oracleType: detail.oracleType,
+    oracleQuery: detail.oracleQuery,
+    winningOutcome: detail.winningOutcome,
+    winningLabel: detail.winningLabel
+  };
+}
+
+async function fetchMarketAddresses(publicClient: PublicClient, marketFactory: Address) {
+  return publicClient.readContract({
+    address: marketFactory,
+    abi: marketFactoryAbi,
+    functionName: "getAllMarkets"
+  });
+}
+
+function getMarketStatus(resolved: boolean, endTime: bigint): MarketStatus {
+  const now = BigInt(Math.floor(Date.now() / 1000));
+
+  if (resolved) return "resolved";
+  if (endTime <= now) return "awaiting";
+  return "active";
+}
+
+function getStatusLabel(status: MarketStatus) {
+  if (status === "active") return "Active";
+  if (status === "awaiting") return "Awaiting Resolution";
+  return "Resolved";
+}
+
+function getEndTimeLabel(endTime: bigint) {
+  return new Date(Number(endTime) * 1000).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  });
+}
+
+function deriveQuestion(oracleType: string, oracleQuery: string, marketAddress: Address) {
+  if (oracleType === "sports" && oracleQuery.includes("_vs_")) {
+    const [home, away] = oracleQuery.split("_vs_");
+    return `Will ${formatTeam(home)} beat ${formatTeam(away)}?`;
+  }
+
+  if (oracleType === "crypto" && oracleQuery.endsWith("_price")) {
+    return `Will ${oracleQuery.replace("_price", "").toUpperCase()} hit the target price?`;
+  }
+
+  if (oracleQuery) {
+    return oracleQuery
+      .split(/[_-]/g)
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+  }
+
+  return `Market ${marketAddress.slice(0, 8)}`;
+}
+
+function formatTeam(team: string) {
+  return team
+    .split(/[_-]/g)
+    .filter(Boolean)
+    .map((part) => part.toUpperCase())
+    .join(" ");
+}

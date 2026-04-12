@@ -1,162 +1,78 @@
 import { expect } from "chai";
-import hre from "hardhat";
+import { ethers } from "hardhat";
 
 describe("MarketFactory", function () {
-
-  let publicClient: any;
-
-  let owner: any;
-  let user1: any;
-
-  let usdc: any;
-  let feeVault: any;
-  let factory: any;
-
-  let oracle: any;
-
   const ONE_USDC = 1_000_000n;
 
-  beforeEach(async function () {
+  async function deployFixture() {
+    const [owner, user1] = await ethers.getSigners();
 
-    const { viem } = hre;
+    const usdc = await ethers.deployContract("MockUSDC");
+    await usdc.waitForDeployment();
 
-    publicClient = await viem.getPublicClient();
-    const walletClients = await viem.getWalletClients();
+    const feeVault = await ethers.deployContract("FeeVault", [owner.address]);
+    await feeVault.waitForDeployment();
 
-    owner = walletClients[0];
-    user1 = walletClients[1];
+    const oracle = await ethers.deployContract("MarketOracle");
+    await oracle.waitForDeployment();
 
-    // Deploy MockUSDC
-    usdc = await viem.deployContract("MockUSDC");
-
-    // Deploy FeeVault
-    feeVault = await viem.deployContract("FeeVault", [
-      owner.account.address
+    const factory = await ethers.deployContract("MarketFactory", [
+      await usdc.getAddress(),
+      await feeVault.getAddress(),
+      await oracle.getAddress(),
+      owner.address,
     ]);
+    await factory.waitForDeployment();
 
-    // Deploy Oracle
-oracle = await viem.deployContract("MarketOracle");
-
-//deploy Factory
-   factory = await viem.deployContract("MarketFactory", [
-  usdc.address,
-  feeVault.address,
-  oracle.address,
-  owner.account.address
-]);
-
-  });
-
-  // ---------------------------------
-  // TEST 1 — CREATE MARKET
-  // ---------------------------------
+    return { owner, user1, usdc, feeVault, oracle, factory };
+  }
 
   it("Should create a new market", async function () {
+    const { user1, usdc, factory } = await deployFixture();
+    const latestBlock = await ethers.provider.getBlock("latest");
+    const endTime = BigInt((latestBlock?.timestamp ?? 0) + 3600);
 
-    const block = await publicClient.getBlock();
-    const endTime = block.timestamp + 3600n;
+    await usdc.mint(user1.address, 100n * ONE_USDC);
+    await usdc.connect(user1).approve(await factory.getAddress(), 100n * ONE_USDC);
 
-    // Give user funds
-    await usdc.write.mint([
-      user1.account.address,
-      100n * ONE_USDC
-    ]);
-
-    // Approve factory to spend creation fee
-    await usdc.write.approve(
-      [factory.address, 100n * ONE_USDC],
-      { account: user1.account }
+    await factory.connect(user1).createMarket(
+      "Will BTC hit 100k?",
+      endTime,
+      "crypto",
+      "bitcoin_price"
     );
 
-   await factory.write.createMarket(
-  [
-    "Will BTC hit 100k?",
-    endTime,
-    "crypto",
-    "bitcoin_price"
-  ],
-  { account: user1.account }
-);
-
-    const total = await factory.read.totalMarkets();
-
-    expect(total).to.equal(1n);
-
+    expect(await factory.totalMarkets()).to.equal(1n);
   });
-
-  // ---------------------------------
-  // TEST 2 — CREATOR MARKETS
-  // ---------------------------------
 
   it("Should track markets created by user", async function () {
+    const { user1, usdc, factory } = await deployFixture();
+    const latestBlock = await ethers.provider.getBlock("latest");
+    const endTime = BigInt((latestBlock?.timestamp ?? 0) + 3600);
 
-    const block = await publicClient.getBlock();
-    const endTime = block.timestamp + 3600n;
+    await usdc.mint(user1.address, 200n * ONE_USDC);
+    await usdc.connect(user1).approve(await factory.getAddress(), 200n * ONE_USDC);
 
-    await usdc.write.mint([
-      user1.account.address,
-      200n * ONE_USDC
-    ]);
+    await factory.connect(user1).createMarket("Market 1", endTime, "crypto", "btc");
+    await factory.connect(user1).createMarket("Market 2", endTime, "crypto", "eth");
 
-    await usdc.write.approve(
-      [factory.address, 200n * ONE_USDC],
-      { account: user1.account }
-    );
-
-   await factory.write.createMarket(
-  ["Market 1", endTime, "crypto", "btc"],
-  { account: user1.account }
-);
-
-  await factory.write.createMarket(
-  ["Market 2", endTime, "crypto", "eth"],
-  { account: user1.account }
-);
-
-    const markets = await factory.read.getMarketsByCreator([
-      user1.account.address
-    ]);
-
+    const markets = await factory.getMarketsByCreator(user1.address);
     expect(markets.length).to.equal(2);
-
   });
-
-  // ---------------------------------
-  // TEST 3 — PAGINATION
-  // ---------------------------------
 
   it("Should return markets using pagination", async function () {
+    const { user1, usdc, factory } = await deployFixture();
+    const latestBlock = await ethers.provider.getBlock("latest");
+    const endTime = BigInt((latestBlock?.timestamp ?? 0) + 3600);
 
-    const block = await publicClient.getBlock();
-    const endTime = block.timestamp + 3600n;
+    await usdc.mint(user1.address, 300n * ONE_USDC);
+    await usdc.connect(user1).approve(await factory.getAddress(), 300n * ONE_USDC);
 
-    await usdc.write.mint([
-      user1.account.address,
-      300n * ONE_USDC
-    ]);
-
-    await usdc.write.approve(
-      [factory.address, 300n * ONE_USDC],
-      { account: user1.account }
-    );
-
-    // Create 3 markets
     for (let i = 0; i < 3; i++) {
-
-      await factory.write.createMarket(
-  [`Market ${i}`, endTime, "crypto", "btc"],
-  { account: user1.account }
-);
-
+      await factory.connect(user1).createMarket(`Market ${i}`, endTime, "crypto", "btc");
     }
 
-    const markets = await factory.read.getMarkets([
-      0n,
-      2n
-    ]);
-
+    const markets = await factory.getMarkets(0, 2);
     expect(markets.length).to.equal(2);
-
   });
-
 });

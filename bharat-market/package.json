@@ -5,7 +5,6 @@
   "scripts": {
     "compile": "hardhat compile",
     "test": "hardhat test",
-    "deploy:oracle": "hardhat run scripts/deployOracle.ts --network amoy",
     "deploy:all": "hardhat run scripts/deployAll.ts --network amoy",
     "resolve": "hardhat run scripts/requestResolution.ts --network amoy",
     "node": "hardhat node",

@@ -1,178 +1,80 @@
 import { expect } from "chai";
-import hre from "hardhat";
+import { ethers } from "hardhat";
 
 describe("Market Liquidity", function () {
-
-  let publicClient: any;
-
-  let owner: any;
-  let user1: any;
-  let user2: any;
-
-  let usdc: any;
-  let market: any;
-  let feeVault: any;
-  let oracle: any;
-
   const ONE_USDC = 1_000_000n;
-beforeEach(async function () {
 
-  const { viem } = hre;
+  async function deployFixture() {
+    const [owner, user1, user2] = await ethers.getSigners();
 
-  publicClient = await viem.getPublicClient();
-  const walletClients = await viem.getWalletClients();
+    const usdc = await ethers.deployContract("MockUSDC");
+    await usdc.waitForDeployment();
 
-  owner = walletClients[0];
-  user1 = walletClients[1];
-  user2 = walletClients[2];
+    const feeVault = await ethers.deployContract("FeeVault", [owner.address]);
+    await feeVault.waitForDeployment();
 
-  // Deploy MockUSDC
-  usdc = await viem.deployContract("MockUSDC");
+    const oracle = await ethers.deployContract("MarketOracle");
+    await oracle.waitForDeployment();
 
-  // Deploy FeeVault
-  feeVault = await viem.deployContract("FeeVault", [
-    owner.account.address
-  ]);
+    const latestBlock = await ethers.provider.getBlock("latest");
+    const endTime = BigInt((latestBlock?.timestamp ?? 0) + 3600);
 
-  // 🔥 DEPLOY ORACLE (missing step)
-  oracle = await viem.deployContract("MarketOracle");
+    const market = await ethers.deployContract("Market", [
+      await usdc.getAddress(),
+      await feeVault.getAddress(),
+      endTime,
+      "Will CSK win?",
+      owner.address,
+      await oracle.getAddress(),
+      "sports",
+      "csk_vs_mi",
+    ]);
+    await market.waitForDeployment();
 
-  const block = await publicClient.getBlock();
-  const endTime = block.timestamp + 3600n;
-
-  // Deploy Market
-market = await viem.deployContract("Market", [
-  usdc.address,
-  feeVault.address,
-  endTime,
-  "Will CSK win?",
-  owner.account.address,
-  oracle.address,
-  "sports",
-  "csk_vs_mi"
-]);
-
-});
-
-  // -------------------------------
-  // TEST 1 — ADD LIQUIDITY
-  // -------------------------------
+    return { owner, user1, user2, usdc, feeVault, oracle, market };
+  }
 
   it("User should add liquidity and receive LP tokens", async function () {
+    const { user1, usdc, market } = await deployFixture();
 
-    await usdc.write.mint([
-      user1.account.address,
-      1000n * ONE_USDC
-    ]);
+    await usdc.mint(user1.address, 1000n * ONE_USDC);
+    await usdc.connect(user1).approve(await market.getAddress(), 500n * ONE_USDC);
+    await market.connect(user1).addLiquidity(100n * ONE_USDC);
 
-    await usdc.write.approve(
-      [market.address, 500n * ONE_USDC],
-      { account: user1.account }
-    );
-
-    await market.write.addLiquidity(
-      [100n * ONE_USDC],
-      { account: user1.account }
-    );
-
-    const lpTokenAddress = await market.read.lpToken();
-
-    const lpToken = await hre.viem.getContractAt(
-      "LiquidityToken",
-      lpTokenAddress
-    );
-
-    const balance = await lpToken.read.balanceOf([
-      user1.account.address
-    ]);
-
-    expect(balance > 0n).to.equal(true);
-
+    const lpToken = await ethers.getContractAt("LiquidityToken", await market.lpToken());
+    expect(await lpToken.balanceOf(user1.address)).to.be.greaterThan(0n);
   });
-
-  // -------------------------------
-  // TEST 2 — POOL SIZE INCREASES
-  // -------------------------------
 
   it("Liquidity should increase pool size", async function () {
+    const { user1, usdc, market } = await deployFixture();
 
-    await usdc.write.mint([
-      user1.account.address,
-      1000n * ONE_USDC
-    ]);
+    await usdc.mint(user1.address, 1000n * ONE_USDC);
+    await usdc.connect(user1).approve(await market.getAddress(), 500n * ONE_USDC);
 
-    await usdc.write.approve(
-      [market.address, 500n * ONE_USDC],
-      { account: user1.account }
-    );
+    const beforeYes = await market.yesPool();
+    const beforeNo = await market.noPool();
 
-    const beforeYes = await market.read.yesPool();
-    const beforeNo = await market.read.noPool();
+    await market.connect(user1).addLiquidity(100n * ONE_USDC);
 
-    await market.write.addLiquidity(
-      [100n * ONE_USDC],
-      { account: user1.account }
-    );
-
-    const afterYes = await market.read.yesPool();
-    const afterNo = await market.read.noPool();
-
-    expect(afterYes > beforeYes).to.equal(true);
-    expect(afterNo > beforeNo).to.equal(true);
-
+    expect(await market.yesPool()).to.be.greaterThan(beforeYes);
+    expect(await market.noPool()).to.be.greaterThan(beforeNo);
   });
 
-  // -------------------------------
-  // TEST 3 — REMOVE LIQUIDITY
-  // -------------------------------
-
   it("User should remove liquidity and receive USDC", async function () {
+    const { user1, usdc, market } = await deployFixture();
 
-    await usdc.write.mint([
-  user1.account.address,
-  1000n * ONE_USDC
-]);
+    await usdc.mint(user1.address, 1000n * ONE_USDC);
+    await usdc.mint(await market.getAddress(), 3000n * ONE_USDC);
+    await usdc.connect(user1).approve(await market.getAddress(), 500n * ONE_USDC);
 
-// fund market to match initial pools
-await usdc.write.mint([
-  market.address,
-  3000n * ONE_USDC
-]);
+    await market.connect(user1).addLiquidity(100n * ONE_USDC);
 
-await usdc.write.approve(
-  [market.address, 500n * ONE_USDC],
-  { account: user1.account }
-);
+    const lpToken = await ethers.getContractAt("LiquidityToken", await market.lpToken());
+    const lpBalance = await lpToken.balanceOf(user1.address);
+    const before = await usdc.balanceOf(user1.address);
 
-await market.write.addLiquidity(
-  [100n * ONE_USDC],
-  { account: user1.account }
-);
+    await market.connect(user1).removeLiquidity(lpBalance);
 
-const lpTokenAddress = await market.read.lpToken();
-
-const lpToken = await hre.viem.getContractAt(
-  "LiquidityToken",
-  lpTokenAddress
-);
-
-const lpBalance = await lpToken.read.balanceOf([
-  user1.account.address
-]);
-
-const before = await usdc.read.balanceOf([
-  user1.account.address
-]);
-
-await market.write.removeLiquidity(
-  [lpBalance],
-  { account: user1.account }
-);
-
-const after = await usdc.read.balanceOf([
-  user1.account.address
-]);
-
-expect(after > before).to.equal(true);  });
-
+    expect(await usdc.balanceOf(user1.address)).to.be.greaterThan(before);
+  });
 });
