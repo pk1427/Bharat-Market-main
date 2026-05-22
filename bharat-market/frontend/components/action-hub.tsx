@@ -6,6 +6,7 @@ import { parseUnits } from "viem";
 import { useAccount, usePublicClient, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
 
 import { marketFactoryAbi, mockUsdcAbi } from "@/lib/abis";
+import { collateralConfig } from "@/lib/collateral";
 import { getRequiredAddresses } from "@/lib/contracts";
 import { getSafeFeeOverrides } from "@/lib/fees";
 import { formatTxError, formatUsdc } from "@/lib/format";
@@ -104,7 +105,7 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated: () => void }) 
 
     try {
       setError(null);
-      setStatus("Minting 100 MockUSDC to your wallet...");
+      setStatus(`Minting 100 ${collateralConfig.label} to your wallet...`);
       const fees = await getSafeFeeOverrides(client);
       const hash = await writeContractAsync({
         address: addresses.usdc,
@@ -150,7 +151,7 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated: () => void }) 
         throw new Error(`You need at least ${formatUsdc(requiredFee)} to pay the creation fee.`);
       }
       if (!hasCreationApproval) {
-        throw new Error("Approve MockUSDC for the creation fee before creating the market.");
+        throw new Error(`Approve ${collateralConfig.label} for the creation fee before creating the market.`);
       }
 
       const durationMinutes = Number(createForm.durationMinutes);
@@ -184,7 +185,7 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated: () => void }) 
 
   useEffect(() => {
     if (mintSuccess) {
-      setStatus("MockUSDC ready in your wallet.");
+      setStatus(`${collateralConfig.label} ready in your wallet.`);
     }
   }, [mintSuccess]);
 
@@ -206,22 +207,35 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated: () => void }) 
       <div className="glass rounded-[28px] p-5">
         <h2 className="font-heading text-2xl uppercase text-white">Wallet Actions</h2>
         <p className="mt-2 text-sm leading-6 text-slate-300">
-          Fund your connected wallet with MockUSDC, then jump into a live market.
+          {collateralConfig.isMintable
+            ? `Fund your connected wallet with ${collateralConfig.label}, then jump into a live market.`
+            : `Make sure your connected wallet is funded with ${collateralConfig.label} before trading or creating markets.`}
         </p>
 
         <div className="mt-5 grid gap-3">
-          <button
-            type="button"
-            onClick={handleMintUsdc}
-            disabled={!address || !addresses || busy}
-            className="rounded-2xl border border-mint/30 bg-mint/15 px-4 py-3 font-semibold text-mint transition disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {mintConfirming ? "Minting..." : "Mint 100 MockUSDC"}
-          </button>
+          {collateralConfig.isMintable ? (
+            <button
+              type="button"
+              onClick={handleMintUsdc}
+              disabled={!address || !addresses || busy}
+              className="rounded-2xl border border-mint/30 bg-mint/15 px-4 py-3 font-semibold text-mint transition disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {mintConfirming ? "Minting..." : `Mint 100 ${collateralConfig.label}`}
+            </button>
+          ) : collateralConfig.faucetUrl ? (
+            <a
+              href={collateralConfig.faucetUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-2xl border border-mint/30 bg-mint/15 px-4 py-3 text-center font-semibold text-mint transition hover:border-mint/50"
+            >
+              Get {collateralConfig.label} from Faucet
+            </a>
+          ) : null}
 
           <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
             <div className="flex items-center justify-between">
-              <span>Wallet MockUSDC</span>
+              <span>Wallet {collateralConfig.label}</span>
               <span className="font-semibold text-white">{formatUsdc(usdcBalance ?? 0n)}</span>
             </div>
             <div className="mt-2 flex items-center justify-between">

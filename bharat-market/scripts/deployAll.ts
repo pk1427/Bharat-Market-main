@@ -1,7 +1,7 @@
 // scripts/deployAll.ts
 //
 // Full BharatMarket deployment on Polygon Amoy:
-//   1. MockUSDC (testnet collateral)
+//   1. Collateral token
 //   2. FeeVault
 //   3. MarketOracle
 //   4. ChainlinkFunctionsOracle
@@ -14,6 +14,7 @@
 //   npx hardhat run scripts/deployAll.ts --network amoy
 
 import { ethers } from "hardhat";
+import { getAddress, isAddress } from "ethers";
 
 // ============================================================
 // Chainlink Functions — Polygon Amoy
@@ -21,12 +22,28 @@ import { ethers } from "hardhat";
 const CHAINLINK_CONFIG = {
   router: "0xC22a79eBA640940ABB6dF0f7982cc119578E11De",
   donId: ethers.encodeBytes32String("fun-polygon-amoy-1"),
-  subscriptionId: 555, // ← update after creating subscription
+  subscriptionId: Number(process.env.CHAINLINK_FUNCTIONS_SUBSCRIPTION_ID ?? "555"),
 };
+
+function getConfiguredCollateralAddress() {
+  const configured = process.env.COLLATERAL_TOKEN_ADDRESS?.trim();
+
+  if (!configured) {
+    return null;
+  }
+
+  if (!isAddress(configured)) {
+    throw new Error(`Invalid COLLATERAL_TOKEN_ADDRESS: ${configured}`);
+  }
+
+  return getAddress(configured);
+}
 
 async function main() {
   const [deployer] = await ethers.getSigners();
   const network = await ethers.provider.getNetwork();
+  const configuredCollateralAddress = getConfiguredCollateralAddress();
+  const collateralLabel = process.env.COLLATERAL_TOKEN_LABEL?.trim() || (configuredCollateralAddress ? "External collateral token" : "MockUSDC");
 
   console.log("═══════════════════════════════════════════════");
   console.log("  BharatMarket — Full Deployment");
@@ -37,14 +54,24 @@ async function main() {
   console.log("");
 
   // -----------------------------------------------
-  // 1. MockUSDC
+  // 1. Collateral token
   // -----------------------------------------------
-  console.log("1/5  Deploying MockUSDC...");
-  const MockUSDC = await ethers.getContractFactory("MockUSDC");
-  const mockUSDC = await MockUSDC.deploy();
-  await mockUSDC.waitForDeployment();
-  const usdcAddress = await mockUSDC.getAddress();
-  console.log("     MockUSDC →", usdcAddress);
+  let deployedMockUsdcAddress: string | null = null;
+  let usdcAddress: string;
+
+  if (configuredCollateralAddress) {
+    console.log(`1/5  Using existing collateral token (${collateralLabel})...`);
+    usdcAddress = configuredCollateralAddress;
+    console.log("     Collateral →", usdcAddress);
+  } else {
+    console.log("1/5  Deploying MockUSDC...");
+    const MockUSDC = await ethers.getContractFactory("MockUSDC");
+    const mockUSDC = await MockUSDC.deploy();
+    await mockUSDC.waitForDeployment();
+    deployedMockUsdcAddress = await mockUSDC.getAddress();
+    usdcAddress = deployedMockUsdcAddress;
+    console.log("     MockUSDC →", usdcAddress);
+  }
 
   // -----------------------------------------------
   // 2. FeeVault
@@ -107,7 +134,7 @@ async function main() {
   console.log("\n═══════════════════════════════════════════════");
   console.log("  ✅  All Contracts Deployed");
   console.log("═══════════════════════════════════════════════");
-  console.log("MockUSDC                 :", usdcAddress);
+  console.log(`${collateralLabel.padEnd(24)} :`, usdcAddress);
   console.log("FeeVault                 :", feeVaultAddress);
   console.log("MarketOracle             :", marketOracleAddress);
   console.log("ChainlinkFunctionsOracle :", clOracleAddress);
@@ -128,7 +155,9 @@ async function main() {
     network: network.name,
     chainId: network.chainId.toString(),
     deployer: deployer.address,
-    MockUSDC: usdcAddress,
+    collateralLabel,
+    CollateralToken: usdcAddress,
+    MockUSDC: deployedMockUsdcAddress,
     FeeVault: feeVaultAddress,
     MarketOracle: marketOracleAddress,
     ChainlinkFunctionsOracle: clOracleAddress,

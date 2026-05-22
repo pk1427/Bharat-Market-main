@@ -33,6 +33,39 @@ export function TradePanel({
   const [actionLabel, setActionLabel] = useState<string | null>(null);
   const [allowance, setAllowance] = useState<bigint>(0n);
 
+  async function refreshTradeState(currentSide: Side, currentAmount: string) {
+    if (!address) {
+      setAllowance(0n);
+      setPreview(0n);
+      return;
+    }
+
+    const params = new URLSearchParams();
+    params.set("account", address);
+
+    const trimmedAmount = currentAmount.trim();
+    if (!disabled && trimmedAmount) {
+      params.set("side", currentSide);
+      params.set("amount", trimmedAmount);
+    }
+
+    const response = await fetch(`/api/markets/${marketAddress}/wallet?${params.toString()}`, {
+      cache: "no-store"
+    });
+    const payload = (await response.json()) as {
+      allowance?: string;
+      preview?: string;
+      error?: string;
+    };
+
+    if (!response.ok) {
+      throw new Error(payload.error ?? "Failed to refresh trade state.");
+    }
+
+    setAllowance(BigInt(payload.allowance ?? "0"));
+    setPreview(BigInt(payload.preview ?? "0"));
+  }
+
   const parsedAmount = useMemo(() => {
     try {
       return amount.trim() ? parseUnits(amount.trim(), 6) : 0n;
@@ -63,18 +96,7 @@ export function TradePanel({
         setPreview(0n);
         if (address) {
           try {
-            const params = new URLSearchParams();
-            params.set("account", address);
-            const response = await fetch(`/api/markets/${marketAddress}/wallet?${params.toString()}`, {
-              cache: "no-store"
-            });
-            const payload = (await response.json()) as {
-              allowance?: string;
-            };
-
-            if (!cancelled) {
-              setAllowance(BigInt(payload.allowance ?? "0"));
-            }
+            await refreshTradeState(side, amount);
           } catch {
             if (!cancelled) {
               setAllowance(0n);
@@ -86,29 +108,8 @@ export function TradePanel({
 
       try {
         setPreviewLoading(true);
-        const params = new URLSearchParams();
-        params.set("side", side);
-        params.set("amount", amount.trim());
-        if (address) {
-          params.set("account", address);
-        }
-
-        const response = await fetch(`/api/markets/${marketAddress}/wallet?${params.toString()}`, {
-          cache: "no-store"
-        });
-        const payload = (await response.json()) as {
-          preview?: string;
-          allowance?: string;
-          error?: string;
-        };
-
-        if (!response.ok) {
-          throw new Error(payload.error ?? "Preview failed.");
-        }
-
+        await refreshTradeState(side, amount);
         if (!cancelled) {
-          setPreview(BigInt(payload.preview ?? "0"));
-          setAllowance(BigInt(payload.allowance ?? "0"));
           setError(null);
         }
       } catch (err) {
@@ -131,12 +132,37 @@ export function TradePanel({
   }, [address, amount, disabled, marketAddress, parsedAmount, side]);
 
   useEffect(() => {
+    if (!txHash || txKind !== "approve") {
+      return;
+    }
+
+    if (receipt?.status === "success") {
+      void refreshTradeState(side, amount)
+        .then(() => {
+          setError(null);
+        })
+        .catch((err) => {
+          setError(formatTxError(err));
+        });
+      return;
+    }
+
+    if (receipt?.status === "reverted") {
+      setError("Approval failed on-chain.");
+    }
+  }, [amount, receipt, side, txHash, txKind, address, marketAddress, disabled]);
+
+  useEffect(() => {
     if (!txHash || txKind !== "trade") {
       return;
     }
 
     if (receipt?.status === "success") {
       onComplete();
+      void refreshTradeState(side, "")
+        .catch(() => {
+          // Ignore refresh failure here; parent refresh still runs.
+        });
       setAmount("");
       setPreview(0n);
       return;
@@ -145,7 +171,7 @@ export function TradePanel({
     if (receipt?.status === "reverted") {
       setError("Trade failed on-chain. The market may be closed or the transaction may have reverted.");
     }
-  }, [onComplete, receipt, txHash, txKind]);
+  }, [onComplete, receipt, txHash, txKind, side, address, marketAddress, disabled]);
 
   useEffect(() => {
     if (!txHash || txKind !== "trade" || !receiptError) {

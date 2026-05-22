@@ -2,7 +2,9 @@ import { ethers } from "hardhat";
 
 async function main() {
   const factoryAddress = process.env.MARKET_FACTORY_ADDRESS!;
-  const usdcAddress = process.env.MOCK_USDC_ADDRESS!;
+  const usdcAddress =
+    process.env.COLLATERAL_TOKEN_ADDRESS ?? process.env.MOCK_USDC_ADDRESS!;
+  const collateralIsMintable = process.env.COLLATERAL_IS_MINTABLE === "true";
 
   const [signer] = await ethers.getSigners();
 
@@ -10,27 +12,34 @@ async function main() {
 
   // Load contracts
   const factory = await ethers.getContractAt("MarketFactory", factoryAddress);
-  const usdc = await ethers.getContractAt("MockUSDC", usdcAddress);
+  const usdc = await ethers.getContractAt(
+    collateralIsMintable ? "MockUSDC" : "@openzeppelin/contracts/token/ERC20/IERC20.sol:IERC20",
+    usdcAddress
+  );
 
   // --------------------------------------------------
-  // 🔥 STEP 1 — MINT USDC (FIX)
+  // STEP 1 — OPTIONAL MINT FOR MOCK COLLATERAL
   // --------------------------------------------------
   const mintAmount = ethers.parseUnits("100", 6);
 
-  console.log("Minting USDC...");
-  const mintTx = await usdc.mint(signer.address, mintAmount);
-  await mintTx.wait();
-  console.log("USDC minted ✅");
+  if (collateralIsMintable) {
+    console.log("Minting collateral...");
+    const mintTx = await (usdc as any).mint(signer.address, mintAmount);
+    await mintTx.wait();
+    console.log("Collateral minted ✅");
+  } else {
+    console.log("Skipping mint step: using external collateral token.");
+  }
 
   // --------------------------------------------------
   // STEP 2 — APPROVE
   // --------------------------------------------------
   const fee = ethers.parseUnits("10", 6);
 
-  console.log("Approving USDC...");
+  console.log("Approving collateral...");
   const approveTx = await usdc.approve(factoryAddress, fee);
   await approveTx.wait();
-  console.log("USDC approved ✅");
+  console.log("Collateral approved ✅");
 
   // --------------------------------------------------
   // STEP 3 — CREATE MARKET
@@ -47,6 +56,9 @@ async function main() {
   );
 
   const receipt = await tx.wait();
+  if (!receipt) {
+    throw new Error("Transaction receipt was null after createMarket.");
+  }
 
   console.log("Market created ✅");
 

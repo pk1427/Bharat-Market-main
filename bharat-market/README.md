@@ -13,7 +13,7 @@ The on-chain stack includes:
 - `FeeVault`: collects protocol fees
 - `MarketOracle`: authorization layer that resolves markets securely
 - `ChainlinkFunctionsOracle`: off-chain data adapter for Chainlink Functions resolution
-- `MockUSDC`: 6-decimal test collateral token
+- `MockUSDC`: 6-decimal test collateral token for local/demo deployments
 
 ## Repo Structure
 
@@ -36,6 +36,7 @@ npm install
 npm run compile
 npm test
 npm run deploy:all
+npm run sync:frontend-env
 npm run resolve
 ```
 
@@ -47,15 +48,45 @@ Create a `.env` file in `bharat-market/` for contract deployment:
 PRIVATE_KEY=0x...
 POLYGON_AMOY_RPC=https://rpc-amoy.polygon.technology
 POLYGONSCAN_API_KEY=...
+CHAINLINK_FUNCTIONS_SUBSCRIPTION_ID=555
+# Optional: use an existing ERC20 collateral token instead of deploying MockUSDC
+# COLLATERAL_TOKEN_ADDRESS=0x...
+# COLLATERAL_TOKEN_LABEL=USDC
 ```
 
 The frontend uses its own env file for deployed contract addresses and wallet setup.
+
+## Polygon Amoy Staging With External USDC
+
+For staging against an external test token instead of `MockUSDC`:
+
+1. Fill in [`./.env.example`](./.env.example) as your real `.env`
+2. Keep `COLLATERAL_TOKEN_ADDRESS` set to the Polygon Amoy USDC test token
+3. Run:
+
+```bash
+npm run deploy:all
+npm run sync:frontend-env
+```
+
+4. Copy `frontend/.env.local.generated` to `frontend/.env.local`
+5. Redeploy or restart the frontend
+
+This keeps the contracts, frontend, and deployment addresses aligned for external-collateral staging.
+
+Notes:
+
+- `npm run deploy:all` is the external-collateral deployment path for staging.
+- The Ignition module remains a simple `MockUSDC` deployment path for local and demo flows.
+- Sports markets are ready for staging with the current oracle setup.
+- Crypto markets still use Chainlink Functions plus offchain API logic rather than direct onchain Chainlink Data Feeds.
 
 ## Deployment Flow
 
 `scripts/deployAll.ts` deploys:
 
-1. `MockUSDC`
+1. a collateral token
+   `MockUSDC` by default, or an existing token if `COLLATERAL_TOKEN_ADDRESS` is set
 2. `FeeVault`
 3. `MarketOracle`
 4. `ChainlinkFunctionsOracle`
@@ -92,6 +123,11 @@ The product frontend is a Next.js app with:
 - redemption flow for resolved markets
 - optional liquidity management
 
+The frontend also supports environment-driven collateral behavior so the same UI can run in:
+
+- `MockUSDC` mode with a mint button for demo/test flows
+- external-token mode with faucet guidance for real staging collateral
+
 ## Network
 
 Primary target network:
@@ -102,5 +138,6 @@ Primary target network:
 ## Notes
 
 - `MockUSDC` uses 6 decimals
+- Polygon Amoy staging can be upgraded to an external USDC test token by redeploying `MarketFactory` with a new collateral address
 - deployed addresses should be loaded from environment variables, not hardcoded
 - the Hardhat project currently warns on Node.js `21.x`; using an LTS Node version is recommended for deployment and CI stability

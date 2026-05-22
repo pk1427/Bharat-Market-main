@@ -1,7 +1,7 @@
 import { buildModule } from "@nomicfoundation/hardhat-ignition/modules";
 
 const BharatMarketModule = buildModule("BharatMarketModule", (m) => {
-  const mockUSDC = m.contract("MockUSDC");
+  const collateralToken = m.contract("MockUSDC");
   const feeVault = m.contract("FeeVault", [m.getAccount(0)]);
   const marketOracle = m.contract("MarketOracle");
 
@@ -22,14 +22,14 @@ const BharatMarketModule = buildModule("BharatMarketModule", (m) => {
   m.call(marketOracle, "authorizeCaller", [chainlinkFunctionsOracle]);
 
   const marketFactory = m.contract("MarketFactory", [
-    mockUSDC,
+    collateralToken,
     feeVault,
     marketOracle,
     m.getAccount(0),
   ]);
 
   return {
-    mockUSDC,
+    collateralToken,
     feeVault,
     marketOracle,
     chainlinkFunctionsOracle,

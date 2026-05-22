@@ -2,11 +2,15 @@
 
 import { ActionHub } from "@/components/action-hub";
 import { MarketList } from "@/components/market-list";
+import { collateralConfig } from "@/lib/collateral";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 export default function HomePage() {
   const [marketRefreshTick, setMarketRefreshTick] = useState(0);
+  const handleMarketCreated = useCallback(() => {
+    setMarketRefreshTick((value) => value + 1);
+  }, []);
 
   return (
     <main className="space-y-10 pb-10">
@@ -32,7 +36,7 @@ export default function HomePage() {
               <p className="text-xs uppercase tracking-[0.3em] text-mint">What You Can Do</p>
               <p className="mt-2 text-sm leading-6 text-slate-200">
                 Connect MetaMask, scan active IPL-style markets, preview YES/NO pricing, trade
-                with MockUSDC, and redeem after resolution.
+                with {collateralConfig.label}, and redeem after resolution.
               </p>
             </div>
             <div className="rounded-2xl border border-white/10 bg-slate-950/30 p-4 text-sm leading-6 text-slate-300">
@@ -43,7 +47,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <ActionHub onMarketCreated={() => setMarketRefreshTick((value) => value + 1)} />
+      <ActionHub onMarketCreated={handleMarketCreated} />
 
       <section className="space-y-4">
         <div>
