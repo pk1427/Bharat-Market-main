@@ -141,3 +141,5 @@ Primary target network:
 - Polygon Amoy staging can be upgraded to an external USDC test token by redeploying `MarketFactory` with a new collateral address
 - deployed addresses should be loaded from environment variables, not hardcoded
 - the Hardhat project currently warns on Node.js `21.x`; using an LTS Node version is recommended for deployment and CI stability
+
+- 
