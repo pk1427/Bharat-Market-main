@@ -7,8 +7,53 @@ import {
   fetchMarketDetail,
   serializeMarketDetail
 } from "@/lib/market-data";
-import { getCachedDetail, setCachedDetail } from "@/lib/server/market-cache";
+import {
+  getCachedDetail,
+  isFresh,
+  setCachedDetail
+} from "@/lib/server/market-cache";
 import { getServerPublicClient } from "@/lib/server/public-client";
+
+const DETAIL_TTL_MS = 60_000;
+
+async function buildMarketDetailSnapshot(
+  addresses: NonNullable<ReturnType<typeof getRequiredAddresses>>,
+  marketAddress: `0x${string}`,
+  account?: `0x${string}`
+) {
+  const publicClient = getServerPublicClient();
+  const detail = await fetchMarketDetail(
+    publicClient,
+    addresses.marketFactory,
+    marketAddress,
+    addresses.usdc,
+    account
+  );
+
+  const pendingRequest = addresses.chainlinkOracle
+    ? await publicClient.readContract({
+        address: addresses.chainlinkOracle,
+        abi: chainlinkFunctionsOracleAbi,
+        functionName: "marketPendingRequest",
+        args: [marketAddress]
+      })
+    : null;
+
+  const payload = serializeMarketDetail(detail);
+  const normalizedPendingRequest = typeof pendingRequest === "string" ? pendingRequest : null;
+
+  await setCachedDetail(
+    marketAddress,
+    account,
+    payload,
+    normalizedPendingRequest
+  );
+
+  return {
+    market: payload,
+    pendingRequest: normalizedPendingRequest
+  };
+}
 
 export async function GET(
   request: NextRequest,
@@ -27,33 +72,31 @@ export async function GET(
   const marketAddress = getAddress(address);
   const accountParam = request.nextUrl.searchParams.get("account");
   const account = accountParam ? getAddress(accountParam) : undefined;
+  const forceFresh = request.nextUrl.searchParams.get("fresh") === "1";
 
   try {
-    const publicClient = getServerPublicClient();
-    const detail = await fetchMarketDetail(
-      publicClient,
-      addresses.marketFactory,
-      marketAddress,
-      addresses.usdc,
-      account
-    );
+    const cached = await getCachedDetail(marketAddress, account);
+    if (!forceFresh && cached) {
+      if (!isFresh(cached.updatedAt, DETAIL_TTL_MS)) {
+        void buildMarketDetailSnapshot(addresses, marketAddress, account).catch(() => {
+          // Keep serving the last good backend snapshot if refresh fails.
+        });
+      }
 
-    const pendingRequest = addresses.chainlinkOracle
-      ? await publicClient.readContract({
-          address: addresses.chainlinkOracle,
-          abi: chainlinkFunctionsOracleAbi,
-          functionName: "marketPendingRequest",
-          args: [marketAddress]
-        })
-      : null;
+      return NextResponse.json({
+        market: cached.data,
+        pendingRequest: cached.pendingRequest,
+        stale: !isFresh(cached.updatedAt, DETAIL_TTL_MS),
+        updatedAt: cached.updatedAt,
+        cached: true
+      });
+    }
 
-    const payload = serializeMarketDetail(detail);
-
-    await setCachedDetail(marketAddress, account, payload, pendingRequest);
+    const snapshot = await buildMarketDetailSnapshot(addresses, marketAddress, account);
 
     return NextResponse.json({
-      market: payload,
-      pendingRequest,
+      market: snapshot.market,
+      pendingRequest: snapshot.pendingRequest,
       stale: false,
       updatedAt: new Date().toISOString()
     });

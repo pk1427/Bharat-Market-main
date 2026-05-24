@@ -1,0 +1,91 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getAddress } from "viem";
+
+import { getRequiredAddresses } from "@/lib/contracts";
+import { fetchMarketHistoryFromEvents } from "@/lib/event-indexer";
+import {
+  getCachedHistory,
+  isFresh,
+  setCachedHistory
+} from "@/lib/server/market-cache";
+import { getServerPublicClient } from "@/lib/server/public-client";
+
+const HISTORY_TTL_MS = 180_000;
+
+async function buildMarketHistorySnapshot(
+  marketFactory: `0x${string}`,
+  marketAddress: `0x${string}`
+) {
+  const publicClient = getServerPublicClient();
+  const points = await fetchMarketHistoryFromEvents(publicClient, marketFactory, marketAddress);
+  const payload = points.map((point) => ({
+    ...point,
+    yesProbability: point.yesProbability.toString(),
+    noProbability: point.noProbability.toString(),
+    volume: point.volume.toString()
+  }));
+
+  await setCachedHistory(marketAddress, payload);
+  return payload;
+}
+
+export async function GET(
+  _request: NextRequest,
+  context: { params: Promise<{ address: string }> }
+) {
+  const addresses = getRequiredAddresses();
+
+  if (!addresses) {
+    return NextResponse.json({ error: "Missing frontend env configuration." }, { status: 500 });
+  }
+
+  try {
+    const { address } = await context.params;
+    const marketAddress = getAddress(address);
+    const forceFresh = _request.nextUrl.searchParams.get("fresh") === "1";
+    const cached = await getCachedHistory(marketAddress);
+    if (!forceFresh && cached) {
+      if (!isFresh(cached.updatedAt, HISTORY_TTL_MS)) {
+        void buildMarketHistorySnapshot(addresses.marketFactory, marketAddress).catch(() => {
+          // Keep serving the last good backend history snapshot if refresh fails.
+        });
+      }
+
+      return NextResponse.json({
+        points: cached.data,
+        stale: !isFresh(cached.updatedAt, HISTORY_TTL_MS),
+        updatedAt: cached.updatedAt,
+        cached: true
+      });
+    }
+
+    const payload = await buildMarketHistorySnapshot(addresses.marketFactory, marketAddress);
+
+    return NextResponse.json({
+      points: payload
+    });
+  } catch (error) {
+    const { address } = await context.params;
+    const marketAddress = getAddress(address);
+    const cached = await getCachedHistory(marketAddress);
+    if (cached) {
+      return NextResponse.json({
+        points: cached.data,
+        stale: true,
+        updatedAt: cached.updatedAt,
+        warning:
+          error instanceof Error
+            ? error.message
+            : "Failed to load market history."
+      });
+    }
+
+    return NextResponse.json({
+      points: [],
+      warning:
+        error instanceof Error
+          ? error.message
+          : "Failed to load market history."
+    });
+  }
+}

@@ -4,9 +4,13 @@ import { useEffect, useState } from "react";
 import { zeroHash } from "viem";
 import { useAccount, usePublicClient, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
 
+import { ActionButton } from "@/components/ui/action-button";
+import { Panel } from "@/components/ui/panel";
+import { TxStatusNotice } from "@/components/ui/tx-status-notice";
 import { chainlinkFunctionsOracleAbi } from "@/lib/abis";
 import { getCappedGasLimit, getSafeFeeOverrides } from "@/lib/fees";
 import { formatTxError } from "@/lib/format";
+import { failTxToast, handleTxToast, settleTxToast } from "@/lib/tx-toasts";
 
 export function ResolutionPanel({
   marketAddress,
@@ -27,6 +31,7 @@ export function ResolutionPanel({
   const publicClient = usePublicClient();
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
+  const [toastId, setToastId] = useState<string | number | null>(null);
   const { writeContractAsync, isPending } = useWriteContract();
   const {
     data: receipt,
@@ -39,12 +44,30 @@ export function ResolutionPanel({
 
   useEffect(() => {
     if (receipt?.status === "success") {
+      if (txHash && toastId !== null) {
+        settleTxToast({
+          id: toastId,
+          hash: txHash,
+          status: "success",
+          successLabel: "Resolution request submitted.",
+          errorLabel: "Resolution request failed."
+        });
+      }
       onComplete();
     }
     if (receipt?.status === "reverted") {
+      if (txHash && toastId !== null) {
+        settleTxToast({
+          id: toastId,
+          hash: txHash,
+          status: "error",
+          successLabel: "Resolution request submitted.",
+          errorLabel: "Resolution request failed."
+        });
+      }
       setError("Resolution request failed on-chain.");
     }
-  }, [onComplete, receipt]);
+  }, [onComplete, receipt, toastId, txHash]);
 
   useEffect(() => {
     if (!txHash || !receiptError) {
@@ -85,7 +108,9 @@ export function ResolutionPanel({
         ...fees
       });
       setTxHash(hash);
+      setToastId(handleTxToast({ hash, pendingLabel: "Requesting resolution..." }));
     } catch (err) {
+      failTxToast(formatTxError(err));
       setError(formatTxError(err));
     }
   }
@@ -96,7 +121,7 @@ export function ResolutionPanel({
   const disabled = !chainlinkOracleAddress || marketResolved || tooEarly || hasPending || isPending || isLoading;
 
   return (
-    <div className="glass rounded-[28px] p-5">
+    <Panel className="p-5">
       <h3 className="font-heading text-2xl uppercase text-white">Resolution</h3>
       <p className="mt-2 text-sm leading-6 text-slate-300">
         After the market end time, request Chainlink Functions resolution directly from the UI.
@@ -115,29 +140,38 @@ export function ResolutionPanel({
         </div>
       </div>
 
-      {tooEarly ? <p className="mt-4 text-sm text-gold">Market has not ended yet.</p> : null}
+      {tooEarly ? (
+        <TxStatusNotice
+          state="pending"
+          title="Market still active"
+          detail="Resolution requests unlock after the market end time has passed."
+        />
+      ) : null}
       {error ? <p className="mt-4 text-sm text-coral">{error}</p> : null}
       {txHash ? (
-        <p className="mt-4 text-sm text-slate-300">
-          Resolution request{" "}
-          {isPending || isLoading
-            ? "is pending"
-            : receipt?.status === "success"
-              ? "confirmed"
-              : receipt?.status === "reverted"
-                ? "failed"
-                : "submitted"}.
-        </p>
+        <TxStatusNotice
+          state={
+            isPending || isLoading ? "pending" : receipt?.status === "success" ? "success" : "error"
+          }
+          title="Resolution request"
+          detail={
+            isPending || isLoading
+              ? "Waiting for the oracle request transaction to finalize."
+              : receipt?.status === "success"
+                ? "The request was accepted and BharatMarket will poll for fulfillment."
+                : "The resolution request reverted on-chain."
+          }
+        />
       ) : null}
 
-      <button
-        type="button"
+      <ActionButton
         onClick={handleRequestResolution}
         disabled={disabled}
-        className="mt-5 w-full rounded-2xl border border-coral/30 bg-coral/15 px-4 py-3 font-semibold text-coral transition disabled:cursor-not-allowed disabled:opacity-40"
+        tone="coral"
+        className="mt-5 w-full"
       >
         {isPending || isLoading ? "Requesting..." : "Request Resolution"}
-      </button>
-    </div>
+      </ActionButton>
+    </Panel>
   );
 }

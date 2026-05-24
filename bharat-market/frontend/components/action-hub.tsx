@@ -3,22 +3,27 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { parseUnits } from "viem";
+import { ArrowUpRight, Coins, FileText, Sparkles, TimerReset, WalletCards } from "lucide-react";
 import { useAccount, usePublicClient, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
 
+import { ActionButton } from "@/components/ui/action-button";
+import { Panel } from "@/components/ui/panel";
+import { TxStatusNotice } from "@/components/ui/tx-status-notice";
 import { marketFactoryAbi, mockUsdcAbi } from "@/lib/abis";
 import { collateralConfig } from "@/lib/collateral";
 import { getRequiredAddresses } from "@/lib/contracts";
 import { getSafeFeeOverrides } from "@/lib/fees";
 import { formatTxError, formatUsdc } from "@/lib/format";
+import { failTxToast, handleTxToast, settleTxToast } from "@/lib/tx-toasts";
 
-export function ActionHub({ onMarketCreated }: { onMarketCreated: () => void }) {
+export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void }) {
   const { address } = useAccount();
   const publicClient = usePublicClient();
   const addresses = getRequiredAddresses();
   const [createForm, setCreateForm] = useState({
-    question: "Will Mumbai Indians beat KKR today?",
+    question: "",
     oracleType: "sports",
-    oracleQuery: "mi_vs_kkr",
+    oracleQuery: "",
     durationMinutes: "180"
   });
   const [mintHash, setMintHash] = useState<`0x${string}` | undefined>();
@@ -26,6 +31,10 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated: () => void }) 
   const [createHash, setCreateHash] = useState<`0x${string}` | undefined>();
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [statusTone, setStatusTone] = useState<"pending" | "success" | "error" | null>(null);
+  const [mintToastId, setMintToastId] = useState<string | number | null>(null);
+  const [approveToastId, setApproveToastId] = useState<string | number | null>(null);
+  const [createToastId, setCreateToastId] = useState<string | number | null>(null);
   const [creationFee, setCreationFee] = useState<bigint | null>(null);
   const [usdcBalance, setUsdcBalance] = useState<bigint>(0n);
   const [creationAllowance, setCreationAllowance] = useState<bigint>(0n);
@@ -106,6 +115,7 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated: () => void }) 
     try {
       setError(null);
       setStatus(`Minting 100 ${collateralConfig.label} to your wallet...`);
+      setStatusTone("pending");
       const fees = await getSafeFeeOverrides(client);
       const hash = await writeContractAsync({
         address: addresses.usdc,
@@ -115,7 +125,10 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated: () => void }) 
         ...fees
       });
       setMintHash(hash);
+      setMintToastId(handleTxToast({ hash, pendingLabel: `Minting ${collateralConfig.label}...` }));
     } catch (err) {
+      failTxToast(formatTxError(err));
+      setStatusTone("error");
       setError(formatTxError(err));
     }
   }
@@ -127,6 +140,7 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated: () => void }) 
     try {
       setError(null);
       setStatus(`Approving ${formatUsdc(requiredFee)} for market creation...`);
+      setStatusTone("pending");
       const fees = await getSafeFeeOverrides(client);
       const hash = await writeContractAsync({
         address: addresses.usdc,
@@ -136,7 +150,10 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated: () => void }) 
         ...fees
       });
       setApproveHash(hash);
+      setApproveToastId(handleTxToast({ hash, pendingLabel: "Approving creation fee..." }));
     } catch (err) {
+      failTxToast(formatTxError(err));
+      setStatusTone("error");
       setError(formatTxError(err));
     }
   }
@@ -147,6 +164,12 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated: () => void }) 
 
     try {
       setError(null);
+      if (!createForm.question.trim()) {
+        throw new Error("Add a market question before creating the contract.");
+      }
+      if (!createForm.oracleQuery.trim()) {
+        throw new Error("Add an oracle query so BharatMarket can resolve the market.");
+      }
       if (!hasEnoughUsdc) {
         throw new Error(`You need at least ${formatUsdc(requiredFee)} to pay the creation fee.`);
       }
@@ -169,6 +192,7 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated: () => void }) 
       const fees = await getSafeFeeOverrides(client);
 
       setStatus("Creating market on BharatMarket...");
+      setStatusTone("pending");
       const hash = await writeContractAsync({
         address: addresses.marketFactory,
         abi: marketFactoryAbi,
@@ -178,7 +202,10 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated: () => void }) 
         ...fees
       });
       setCreateHash(hash);
+      setCreateToastId(handleTxToast({ hash, pendingLabel: "Creating market..." }));
     } catch (err) {
+      failTxToast(formatTxError(err));
+      setStatusTone("error");
       setError(formatTxError(err));
     }
   }
@@ -186,159 +213,355 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated: () => void }) 
   useEffect(() => {
     if (mintSuccess) {
       setStatus(`${collateralConfig.label} ready in your wallet.`);
+      setStatusTone("success");
+      if (mintHash && mintToastId !== null) {
+        settleTxToast({
+          id: mintToastId,
+          hash: mintHash,
+          status: "success",
+          successLabel: `${collateralConfig.label} minted.`,
+          errorLabel: `${collateralConfig.label} mint failed.`
+        });
+      }
     }
-  }, [mintSuccess]);
+  }, [mintHash, mintSuccess, mintToastId]);
 
   useEffect(() => {
     if (approveSuccess) {
       setStatus("Creation fee approved. You can create the market now.");
+      setStatusTone("success");
+      if (approveHash && approveToastId !== null) {
+        settleTxToast({
+          id: approveToastId,
+          hash: approveHash,
+          status: "success",
+          successLabel: "Creation fee approved.",
+          errorLabel: "Creation fee approval failed."
+        });
+      }
     }
-  }, [approveSuccess]);
+  }, [approveHash, approveSuccess, approveToastId]);
 
   useEffect(() => {
     if (createSuccess) {
       setStatus("Market created. Refresh the market board.");
-      onMarketCreated();
+      setStatusTone("success");
+      onMarketCreated?.();
+      setCreateForm({
+        question: "",
+        oracleType: "sports",
+        oracleQuery: "",
+        durationMinutes: "180"
+      });
+      if (createHash && createToastId !== null) {
+        settleTxToast({
+          id: createToastId,
+          hash: createHash,
+          status: "success",
+          successLabel: "Market created.",
+          errorLabel: "Market creation failed."
+        });
+      }
     }
-  }, [createSuccess, onMarketCreated]);
+  }, [createHash, createSuccess, createToastId, onMarketCreated]);
+
+  const durationLabel = useMemo(() => {
+    const minutes = Number(createForm.durationMinutes || "0");
+    if (!minutes || Number.isNaN(minutes)) return "No duration selected";
+    if (minutes >= 1440) return `${Math.round(minutes / 1440)} day window`;
+    if (minutes >= 60) return `${Math.round(minutes / 60)} hour window`;
+    return `${minutes} minute window`;
+  }, [createForm.durationMinutes]);
 
   return (
-    <section className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
-      <div className="glass rounded-[28px] p-5">
-        <h2 className="font-heading text-2xl uppercase text-white">Wallet Actions</h2>
-        <p className="mt-2 text-sm leading-6 text-slate-300">
-          {collateralConfig.isMintable
-            ? `Fund your connected wallet with ${collateralConfig.label}, then jump into a live market.`
-            : `Make sure your connected wallet is funded with ${collateralConfig.label} before trading or creating markets.`}
-        </p>
-
-        <div className="mt-5 grid gap-3">
-          {collateralConfig.isMintable ? (
-            <button
-              type="button"
-              onClick={handleMintUsdc}
-              disabled={!address || !addresses || busy}
-              className="rounded-2xl border border-mint/30 bg-mint/15 px-4 py-3 font-semibold text-mint transition disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {mintConfirming ? "Minting..." : `Mint 100 ${collateralConfig.label}`}
-            </button>
-          ) : collateralConfig.faucetUrl ? (
-            <a
-              href={collateralConfig.faucetUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-2xl border border-mint/30 bg-mint/15 px-4 py-3 text-center font-semibold text-mint transition hover:border-mint/50"
-            >
-              Get {collateralConfig.label} from Faucet
-            </a>
-          ) : null}
-
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
-            <div className="flex items-center justify-between">
-              <span>Wallet {collateralConfig.label}</span>
-              <span className="font-semibold text-white">{formatUsdc(usdcBalance ?? 0n)}</span>
-            </div>
-            <div className="mt-2 flex items-center justify-between">
-              <span>Creation fee</span>
-              <span className="font-semibold text-white">{formatUsdc(requiredFee)}</span>
-            </div>
+    <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+      <Panel className="p-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="flex items-center gap-2 text-[10px] uppercase tracking-[0.18em] text-violet-400/85">
+              <span className="h-1.5 w-1.5 rounded-full bg-violet-500 shadow-[0_0_8px_rgba(124,58,237,0.95)]" />
+              Creator Form
+            </p>
+            <h2 className="mt-4 font-heading text-[2.4rem] leading-none text-white">
+              Build a new market
+            </h2>
+            <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-400">
+              Configure the market question, oracle route, and expiry window with cleaner
+              creator controls built for BharatMarket’s live sports contracts.
+            </p>
           </div>
 
           {defaultMarketHref ? (
             <Link
               href={defaultMarketHref}
-              className="rounded-2xl border border-gold/30 bg-gold/15 px-4 py-3 text-center font-semibold text-gold transition hover:border-gold/50"
+              className="hidden items-center gap-2 rounded-[14px] border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-300 transition hover:border-white/20 hover:text-white xl:inline-flex"
             >
-              Open Latest Market
+              Open Latest
+              <ArrowUpRight className="h-4 w-4" />
             </Link>
           ) : null}
         </div>
 
-        {status ? <p className="mt-4 text-sm text-slate-300">{status}</p> : null}
-        {error ? <p className="mt-4 text-sm text-coral">{error}</p> : null}
-      </div>
-
-      <div className="glass rounded-[28px] p-5">
-        <h2 className="font-heading text-2xl uppercase text-white">Create Market</h2>
-        <p className="mt-2 text-sm leading-6 text-slate-300">
-          Launch a new IPL-style prediction market directly from the frontend.
-        </p>
-
-        <div className="mt-5 grid gap-4">
-          <label className="text-sm text-slate-300">
-            Question
+        <div className="mt-6 grid gap-6">
+          <div className="grid gap-2">
+            <label className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
+              Market Question
+            </label>
             <input
               value={createForm.question}
               onChange={(event) => setCreateForm((current) => ({ ...current, question: event.target.value }))}
-              className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-white outline-none transition focus:border-gold/40"
+              placeholder="Will Mumbai Indians beat KKR today?"
+              className="w-full rounded-[16px] border border-white/10 bg-slate-950/60 px-4 py-4 text-base text-white outline-none transition placeholder:text-slate-600 focus:border-violet-400/35"
             />
-          </label>
+            <p className="text-xs text-slate-500">
+              Phrase the contract so the answer resolves clearly to YES or NO.
+            </p>
+          </div>
 
-          <div className="grid gap-4 md:grid-cols-3">
-            <label className="text-sm text-slate-300">
-              Oracle Type
+          <div className="grid gap-4 md:grid-cols-[0.85fr_1.15fr]">
+            <div className="grid gap-2">
+              <label className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
+                Oracle Type
+              </label>
               <select
                 value={createForm.oracleType}
                 onChange={(event) => setCreateForm((current) => ({ ...current, oracleType: event.target.value }))}
-                className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-white outline-none"
+                className="w-full rounded-[16px] border border-white/10 bg-slate-950/60 px-4 py-4 text-base text-white outline-none transition focus:border-violet-400/35"
               >
                 <option value="sports">sports</option>
                 <option value="crypto">crypto</option>
                 <option value="election">election</option>
               </select>
-            </label>
+            </div>
 
-            <label className="text-sm text-slate-300">
-              Oracle Query
+            <div className="grid gap-2">
+              <label className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
+                Oracle Query
+              </label>
               <input
                 value={createForm.oracleQuery}
                 onChange={(event) => setCreateForm((current) => ({ ...current, oracleQuery: event.target.value }))}
-                className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-white outline-none transition focus:border-gold/40"
+                placeholder="mi_vs_kkr"
+                className="w-full rounded-[16px] border border-white/10 bg-slate-950/60 px-4 py-4 text-base text-white outline-none transition placeholder:text-slate-600 focus:border-violet-400/35"
               />
-            </label>
+            </div>
+          </div>
 
-            <label className="text-sm text-slate-300">
-              Duration (mins)
+          <div className="grid gap-4 md:grid-cols-[0.8fr_1.2fr]">
+            <div className="grid gap-2">
+              <label className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
+                Duration
+              </label>
               <input
                 value={createForm.durationMinutes}
                 onChange={(event) =>
                   setCreateForm((current) => ({ ...current, durationMinutes: event.target.value }))
                 }
-                className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-white outline-none transition focus:border-gold/40"
+                placeholder="180"
+                className="w-full rounded-[16px] border border-white/10 bg-slate-950/60 px-4 py-4 text-base text-white outline-none transition placeholder:text-slate-600 focus:border-violet-400/35"
               />
-            </label>
+            </div>
+
+            <div className="grid gap-2">
+              <label className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
+                Quick Templates
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCreateForm({
+                      question: "Will Mumbai Indians beat KKR today?",
+                      oracleType: "sports",
+                      oracleQuery: "mi_vs_kkr",
+                      durationMinutes: "180"
+                    })
+                  }
+                  className="rounded-[12px] border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-300 transition hover:border-white/20 hover:text-white"
+                >
+                  IPL Match
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCreateForm({
+                      question: "Will BTC break the target price this week?",
+                      oracleType: "crypto",
+                      oracleQuery: "btc_price",
+                      durationMinutes: "10080"
+                    })
+                  }
+                  className="rounded-[12px] border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-300 transition hover:border-white/20 hover:text-white"
+                >
+                  Crypto Price
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCreateForm({
+                      question: "",
+                      oracleType: "sports",
+                      oracleQuery: "",
+                      durationMinutes: "180"
+                    })
+                  }
+                  className="rounded-[12px] border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-300 transition hover:border-white/20 hover:text-white"
+                >
+                  Clear Form
+                </button>
+              </div>
+            </div>
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
-            <div className="flex items-center justify-between">
-              <span>Fee approval</span>
-              <span className="font-semibold text-white">{hasCreationApproval ? "Ready" : "Required"}</span>
+          <div className="grid gap-3 lg:grid-cols-2">
+            <div className="rounded-[16px] border border-white/8 bg-white/[0.03] p-4">
+              <div className="flex items-center gap-2 text-slate-400">
+                <TimerReset className="h-4 w-4" />
+                <p className="text-[10px] uppercase tracking-[0.16em]">Duration Summary</p>
+              </div>
+              <p className="mt-3 text-sm text-white">{durationLabel}</p>
             </div>
-            <div className="mt-2 flex items-center justify-between">
-              <span>Wallet balance</span>
-              <span className="font-semibold text-white">{formatUsdc(usdcBalance ?? 0n)}</span>
+            <div className="rounded-[16px] border border-white/8 bg-white/[0.03] p-4">
+              <div className="flex items-center gap-2 text-slate-400">
+                <FileText className="h-4 w-4" />
+                <p className="text-[10px] uppercase tracking-[0.16em]">Oracle Route</p>
+              </div>
+              <p className="mt-3 text-sm text-white">
+                {createForm.oracleType || "No type selected"} / {createForm.oracleQuery || "No query yet"}
+              </p>
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={handleApproveCreationFee}
-            disabled={!address || !addresses || busy || hasCreationApproval}
-            className="rounded-2xl border border-mint/30 bg-mint/15 px-4 py-3 font-semibold text-mint transition disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {approveConfirming ? "Approving..." : hasCreationApproval ? "Creation Fee Approved" : "Approve Creation Fee"}
-          </button>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <ActionButton
+              onClick={handleApproveCreationFee}
+              disabled={!address || !addresses || busy || hasCreationApproval}
+              tone="mint"
+              className="justify-center py-4"
+            >
+              {approveConfirming
+                ? "Approving..."
+                : hasCreationApproval
+                  ? "Creation Fee Approved"
+                  : "Approve Creation Fee"}
+            </ActionButton>
 
-          <button
-            type="button"
-            onClick={handleCreateMarket}
-            disabled={!address || !addresses || busy || !hasCreationApproval || !hasEnoughUsdc}
-            className="rounded-2xl border border-gold/30 bg-gold/15 px-4 py-3 font-semibold text-gold transition disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {createConfirming ? "Creating..." : "Create Market"}
-          </button>
+            <ActionButton
+              onClick={handleCreateMarket}
+              disabled={!address || !addresses || busy || !hasCreationApproval || !hasEnoughUsdc}
+              tone="gold"
+              className="justify-center py-4"
+            >
+              {createConfirming ? "Creating..." : "Create Market"}
+            </ActionButton>
+          </div>
+
+          {status && statusTone ? <TxStatusNotice state={statusTone} title={status} /> : null}
+          {error ? <TxStatusNotice state="error" title="Create market failed" detail={error} /> : null}
         </div>
+      </Panel>
+
+      <div className="space-y-6">
+        <Panel className="p-5">
+          <p className="flex items-center gap-2 text-[10px] uppercase tracking-[0.18em] text-violet-400/85">
+            <span className="h-1.5 w-1.5 rounded-full bg-violet-500 shadow-[0_0_8px_rgba(124,58,237,0.95)]" />
+            Preview
+          </p>
+
+          <div className="mt-5 space-y-4">
+            <div className="rounded-[16px] border border-white/8 bg-white/[0.03] p-4">
+              <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Question</p>
+              <p className="mt-3 text-lg font-semibold text-white">
+                {createForm.question.trim() || "Your market question will appear here"}
+              </p>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <PreviewMetric icon={WalletCards} label="Wallet Balance" value={formatUsdc(usdcBalance ?? 0n)} />
+              <PreviewMetric icon={Coins} label="Creation Fee" value={formatUsdc(requiredFee)} />
+              <PreviewMetric icon={Sparkles} label="Oracle Type" value={createForm.oracleType || "--"} />
+              <PreviewMetric icon={TimerReset} label="Expiry Window" value={durationLabel} />
+            </div>
+
+            <div className="rounded-[16px] border border-white/8 bg-white/[0.03] p-4 text-sm text-slate-300">
+              <div className="flex items-center justify-between">
+                <span>Fee approval</span>
+                <span className="font-semibold text-white">
+                  {hasCreationApproval ? "Ready" : "Required"}
+                </span>
+              </div>
+              <div className="mt-2 flex items-center justify-between">
+                <span>Collateral mode</span>
+                <span className="font-semibold text-white">{collateralConfig.label}</span>
+              </div>
+            </div>
+          </div>
+        </Panel>
+
+        <Panel className="p-5">
+          <p className="flex items-center gap-2 text-[10px] uppercase tracking-[0.18em] text-violet-400/85">
+            <span className="h-1.5 w-1.5 rounded-full bg-violet-500 shadow-[0_0_8px_rgba(124,58,237,0.95)]" />
+            Funding
+          </p>
+
+          <p className="mt-4 text-sm leading-7 text-slate-400">
+            {collateralConfig.isMintable
+              ? `Fund your connected wallet with ${collateralConfig.label} before launching the market.`
+              : `Make sure the connected wallet is funded with ${collateralConfig.label} before creating the contract.`}
+          </p>
+
+          <div className="mt-5 grid gap-3">
+            {collateralConfig.isMintable ? (
+              <ActionButton
+                onClick={handleMintUsdc}
+                disabled={!address || !addresses || busy}
+                tone="mint"
+                className="justify-center"
+              >
+                {mintConfirming ? "Minting..." : `Mint 100 ${collateralConfig.label}`}
+              </ActionButton>
+            ) : collateralConfig.faucetUrl ? (
+              <a
+                href={collateralConfig.faucetUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-[14px] border border-mint/30 bg-mint/15 px-4 py-3 text-center font-semibold text-mint transition hover:border-mint/50"
+              >
+                Get {collateralConfig.label} from Faucet
+              </a>
+            ) : null}
+
+            {defaultMarketHref ? (
+              <Link
+                href={defaultMarketHref}
+                className="rounded-[14px] border border-white/10 bg-white/[0.03] px-4 py-3 text-center font-medium text-slate-300 transition hover:border-white/20 hover:text-white"
+              >
+                Open Latest Market
+              </Link>
+            ) : null}
+          </div>
+        </Panel>
       </div>
     </section>
+  );
+}
+
+function PreviewMetric({
+  icon: Icon,
+  label,
+  value
+}: {
+  icon: typeof WalletCards;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-[14px] border border-white/8 bg-white/[0.03] p-4">
+      <div className="flex items-center gap-2 text-slate-500">
+        <Icon className="h-4 w-4" />
+        <p className="text-[10px] uppercase tracking-[0.16em]">{label}</p>
+      </div>
+      <p className="mt-3 text-sm font-semibold text-white">{value}</p>
+    </div>
   );
 }

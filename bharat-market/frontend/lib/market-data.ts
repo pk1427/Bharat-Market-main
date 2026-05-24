@@ -2,20 +2,29 @@ import type { Address, PublicClient } from "viem";
 import { erc20Abi } from "viem";
 
 import { marketAbi, marketFactoryAbi, outcomeTokenAbi } from "@/lib/abis";
+import { getCategoryLabel, getOracleSourceLabel } from "@/lib/market-meta";
 
 export type MarketStatus = "active" | "awaiting" | "resolved";
 
 export type MarketSummary = {
   address: Address;
+  creator: Address | null;
   question: string;
+  category: string;
+  oracleSource: string;
+  oracleType: string;
+  oracleQuery: string;
   yesProbability: bigint;
   noProbability: bigint;
   liquidity: bigint;
+  volume: bigint;
+  traderCount: number;
   endTime: bigint;
   endTimeLabel: string;
   resolved: boolean;
   status: MarketStatus;
   statusLabel: string;
+  resolvedOutcome: number;
 };
 
 export type MarketDetailData = MarketSummary & {
@@ -28,19 +37,18 @@ export type MarketDetailData = MarketSummary & {
   yesToken: Address;
   noToken: Address;
   lpToken: Address;
-  oracleType: string;
-  oracleQuery: string;
   winningOutcome: number;
   winningLabel: string;
 };
 
 export type MarketSummaryDto = Omit<
   MarketSummary,
-  "yesProbability" | "noProbability" | "liquidity" | "endTime"
+  "yesProbability" | "noProbability" | "liquidity" | "volume" | "endTime"
 > & {
   yesProbability: string;
   noProbability: string;
   liquidity: string;
+  volume: string;
   endTime: string;
 };
 
@@ -49,6 +57,7 @@ export type MarketDetailDto = Omit<
   | "yesProbability"
   | "noProbability"
   | "liquidity"
+  | "volume"
   | "endTime"
   | "yesPool"
   | "noPool"
@@ -60,6 +69,7 @@ export type MarketDetailDto = Omit<
   yesProbability: string;
   noProbability: string;
   liquidity: string;
+  volume: string;
   endTime: string;
   yesPool: string;
   noPool: string;
@@ -69,11 +79,18 @@ export type MarketDetailDto = Omit<
   usdcBalance: string;
 };
 
+type CreationMeta = {
+  creator: Address | null;
+  question: string;
+  endTime: bigint;
+};
+
 export async function fetchMarketSummaries(
   publicClient: PublicClient,
   marketFactory: Address
 ): Promise<MarketSummary[]> {
   const marketAddresses = await fetchMarketAddresses(publicClient, marketFactory);
+  const creationMap = await fetchMarketCreationMap(publicClient, marketFactory);
 
   const summaries = await Promise.all(
     marketAddresses.map(async (marketAddress) => {
@@ -85,65 +102,84 @@ export async function fetchMarketSummaries(
         resolved,
         endTime,
         oracleType,
-        oracleQuery
-      ] =
-        await Promise.all([
-          publicClient.readContract({
-            address: marketAddress,
-            abi: marketAbi,
-            functionName: "priceYes"
-          }),
-          publicClient.readContract({
-            address: marketAddress,
-            abi: marketAbi,
-            functionName: "priceNo"
-          }),
-          publicClient.readContract({
-            address: marketAddress,
-            abi: marketAbi,
-            functionName: "yesPool"
-          }),
-          publicClient.readContract({
-            address: marketAddress,
-            abi: marketAbi,
-            functionName: "noPool"
-          }),
-          publicClient.readContract({
-            address: marketAddress,
-            abi: marketAbi,
-            functionName: "resolved"
-          }),
-          publicClient.readContract({
-            address: marketAddress,
-            abi: marketAbi,
-            functionName: "endTime"
-          }),
-          publicClient.readContract({
-            address: marketAddress,
-            abi: marketAbi,
-            functionName: "oracleType"
-          }),
-          publicClient.readContract({
-            address: marketAddress,
-            abi: marketAbi,
-            functionName: "oracleQuery"
-          })
-        ]);
+        oracleQuery,
+        winningOutcome,
+        volume,
+        traderCount
+      ] = await Promise.all([
+        publicClient.readContract({
+          address: marketAddress,
+          abi: marketAbi,
+          functionName: "priceYes"
+        }),
+        publicClient.readContract({
+          address: marketAddress,
+          abi: marketAbi,
+          functionName: "priceNo"
+        }),
+        publicClient.readContract({
+          address: marketAddress,
+          abi: marketAbi,
+          functionName: "yesPool"
+        }),
+        publicClient.readContract({
+          address: marketAddress,
+          abi: marketAbi,
+          functionName: "noPool"
+        }),
+        publicClient.readContract({
+          address: marketAddress,
+          abi: marketAbi,
+          functionName: "resolved"
+        }),
+        publicClient.readContract({
+          address: marketAddress,
+          abi: marketAbi,
+          functionName: "endTime"
+        }),
+        publicClient.readContract({
+          address: marketAddress,
+          abi: marketAbi,
+          functionName: "oracleType"
+        }),
+        publicClient.readContract({
+          address: marketAddress,
+          abi: marketAbi,
+          functionName: "oracleQuery"
+        }),
+        publicClient.readContract({
+          address: marketAddress,
+          abi: marketAbi,
+          functionName: "winningOutcome"
+        }),
+        fetchMarketVolume(publicClient, marketAddress),
+        fetchMarketTraderCount(publicClient, marketAddress)
+      ]);
 
+      const created = creationMap.get(marketAddress.toLowerCase());
       const status = getMarketStatus(resolved, endTime);
-      const question = deriveQuestion(oracleType, oracleQuery, marketAddress);
+      const question =
+        created?.question ?? deriveQuestion(oracleType, oracleQuery, marketAddress);
 
       return {
         address: marketAddress,
+        creator: created?.creator ?? null,
         question,
+        category: getCategoryLabel(oracleType, oracleQuery),
+        oracleSource: getOracleSourceLabel(oracleType),
+        oracleType,
+        oracleQuery,
         yesProbability,
         noProbability,
         liquidity: yesPool + noPool,
+        volume,
+        traderCount,
         endTime,
         endTimeLabel: getEndTimeLabel(endTime),
         resolved,
         status,
-        statusLabel: getStatusLabel(status)
+        statusLabel: getStatusLabel(status),
+        resolvedOutcome: winningOutcome
       };
     })
   );
@@ -158,6 +194,7 @@ export async function fetchMarketDetail(
   usdcAddress: Address,
   account?: Address
 ): Promise<MarketDetailData> {
+  const creationMap = await fetchMarketCreationMap(publicClient, marketFactory);
   const [
     yesProbability,
     noProbability,
@@ -170,7 +207,9 @@ export async function fetchMarketDetail(
     oracleQuery,
     yesToken,
     noToken,
-    lpToken
+    lpToken,
+    volume,
+    traderCount
   ] = await Promise.all([
     publicClient.readContract({
       address: marketAddress,
@@ -231,7 +270,9 @@ export async function fetchMarketDetail(
       address: marketAddress,
       abi: marketAbi,
       functionName: "lpToken"
-    })
+    }),
+    fetchMarketVolume(publicClient, marketAddress),
+    fetchMarketTraderCount(publicClient, marketAddress)
   ]);
 
   const [yesBalance, noBalance, lpBalance, usdcBalance] = account
@@ -264,18 +305,28 @@ export async function fetchMarketDetail(
     : [0n, 0n, 0n, 0n];
 
   const status = getMarketStatus(resolved, endTime);
+  const created = creationMap.get(marketAddress.toLowerCase());
+  const question = created?.question ?? deriveQuestion(oracleType, oracleQuery, marketAddress);
 
   return {
     address: marketAddress,
-    question: deriveQuestion(oracleType, oracleQuery, marketAddress),
+    creator: created?.creator ?? null,
+    question,
+    category: getCategoryLabel(oracleType, oracleQuery),
+    oracleSource: getOracleSourceLabel(oracleType),
+    oracleType,
+    oracleQuery,
     yesProbability,
     noProbability,
     liquidity: yesPool + noPool,
+    volume,
+    traderCount,
     endTime,
     endTimeLabel: getEndTimeLabel(endTime),
     resolved,
     status,
     statusLabel: getStatusLabel(status),
+    resolvedOutcome: winningOutcome,
     yesPool,
     noPool,
     yesBalance,
@@ -285,11 +336,107 @@ export async function fetchMarketDetail(
     yesToken,
     noToken,
     lpToken,
-    oracleType,
-    oracleQuery,
     winningOutcome,
     winningLabel: winningOutcome === 1 ? "YES" : winningOutcome === 2 ? "NO" : "Pending"
   };
+}
+
+export async function fetchMarketVolume(
+  publicClient: PublicClient,
+  marketAddress: Address,
+  account?: Address
+) {
+  const logs = await publicClient.getLogs({
+    address: marketAddress,
+    event: marketAbi[0],
+    ...(account ? { args: { user: account } } : {}),
+    fromBlock: getFromBlockHint()
+  });
+
+  return logs.reduce((total, log) => total + (log.args.amountIn ?? 0n), 0n);
+}
+
+export async function fetchMarketTraderCount(publicClient: PublicClient, marketAddress: Address) {
+  const logs = await publicClient.getLogs({
+    address: marketAddress,
+    event: marketAbi[0],
+    fromBlock: getFromBlockHint()
+  });
+
+  return new Set(logs.flatMap((log) => (log.args.user ? [log.args.user.toLowerCase()] : []))).size;
+}
+
+export async function fetchAverageEntryBySide(
+  publicClient: PublicClient,
+  marketAddress: Address,
+  account: Address
+) {
+  const logs = await publicClient.getLogs({
+    address: marketAddress,
+    event: marketAbi[0],
+    args: { user: account },
+    fromBlock: getFromBlockHint()
+  });
+
+  let yesAmount = 0n;
+  let yesShares = 0n;
+  let noAmount = 0n;
+  let noShares = 0n;
+
+  for (const log of logs) {
+    const amountIn = log.args.amountIn;
+    const sharesMinted = log.args.sharesMinted;
+    if (amountIn === undefined || sharesMinted === undefined) {
+      continue;
+    }
+
+    if (log.args.isYes) {
+      yesAmount += amountIn;
+      yesShares += sharesMinted;
+    } else {
+      noAmount += amountIn;
+      noShares += sharesMinted;
+    }
+  }
+
+  return {
+    yes: yesShares > 0n ? (yesAmount * 1_000_000n) / yesShares : null,
+    no: noShares > 0n ? (noAmount * 1_000_000n) / noShares : null
+  };
+}
+
+export async function fetchMarketCreationMap(
+  publicClient: PublicClient,
+  marketFactory: Address
+) {
+  const logs = await publicClient.getLogs({
+    address: marketFactory,
+    event: marketFactoryAbi[0],
+    fromBlock: getFromBlockHint()
+  });
+
+  return new Map(
+    logs.flatMap((log) => {
+      const market = log.args.market;
+      const creator = log.args.creator;
+      const question = log.args.question;
+      const endTime = log.args.endTime;
+      if (!market || question === undefined || endTime === undefined) {
+        return [];
+      }
+
+      return [
+        [
+          market.toLowerCase(),
+          {
+            creator: creator ?? null,
+            question,
+            endTime
+          } satisfies CreationMeta
+        ] as const
+      ];
+    })
+  );
 }
 
 export function serializeMarketSummary(summary: MarketSummary): MarketSummaryDto {
@@ -298,6 +445,7 @@ export function serializeMarketSummary(summary: MarketSummary): MarketSummaryDto
     yesProbability: summary.yesProbability.toString(),
     noProbability: summary.noProbability.toString(),
     liquidity: summary.liquidity.toString(),
+    volume: summary.volume.toString(),
     endTime: summary.endTime.toString()
   };
 }
@@ -308,6 +456,7 @@ export function deserializeMarketSummary(summary: MarketSummaryDto): MarketSumma
     yesProbability: BigInt(summary.yesProbability),
     noProbability: BigInt(summary.noProbability),
     liquidity: BigInt(summary.liquidity),
+    volume: BigInt(summary.volume),
     endTime: BigInt(summary.endTime)
   };
 }
@@ -324,8 +473,6 @@ export function serializeMarketDetail(detail: MarketDetailData): MarketDetailDto
     yesToken: detail.yesToken,
     noToken: detail.noToken,
     lpToken: detail.lpToken,
-    oracleType: detail.oracleType,
-    oracleQuery: detail.oracleQuery,
     winningOutcome: detail.winningOutcome,
     winningLabel: detail.winningLabel
   };
@@ -343,8 +490,6 @@ export function deserializeMarketDetail(detail: MarketDetailDto): MarketDetailDa
     yesToken: detail.yesToken,
     noToken: detail.noToken,
     lpToken: detail.lpToken,
-    oracleType: detail.oracleType,
-    oracleQuery: detail.oracleQuery,
     winningOutcome: detail.winningOutcome,
     winningLabel: detail.winningLabel
   };
@@ -408,4 +553,12 @@ function formatTeam(team: string) {
     .filter(Boolean)
     .map((part) => part.toUpperCase())
     .join(" ");
+}
+
+function getFromBlockHint() {
+  const value = process.env.NEXT_PUBLIC_FACTORY_DEPLOY_BLOCK;
+  if (!value) return undefined;
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? BigInt(parsed) : undefined;
 }

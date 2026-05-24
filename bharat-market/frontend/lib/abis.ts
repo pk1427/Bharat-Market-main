@@ -8,6 +8,11 @@ export const marketFactoryAbi = parseAbi([
 ]);
 
 export const marketAbi = parseAbi([
+  "event Bought(address indexed user, bool isYes, uint256 amountIn, uint256 sharesMinted)",
+  "event Resolved(uint8 outcome)",
+  "event Redeemed(address indexed user, uint256 payout)",
+  "event LiquidityAdded(address indexed provider, uint256 amount)",
+  "event LiquidityRemoved(address indexed provider, uint256 amount)",
   "function priceYes() view returns (uint256)",
   "function priceNo() view returns (uint256)",
   "function yesPool() view returns (uint256)",
@@ -30,7 +35,8 @@ export const marketAbi = parseAbi([
 ]);
 
 export const outcomeTokenAbi = parseAbi([
-  "function balanceOf(address owner) view returns (uint256)"
+  "function balanceOf(address owner) view returns (uint256)",
+  "function totalSupply() view returns (uint256)"
 ]);
 
 export const mockUsdcAbi = parseAbi([
@@ -41,6 +47,9 @@ export const mockUsdcAbi = parseAbi([
 ]);
 
 export const chainlinkFunctionsOracleAbi = parseAbi([
+  "event ResolutionRequested(bytes32 indexed requestId, address indexed market, string oracleType, string oracleQuery)",
+  "event ResolutionFulfilled(bytes32 indexed requestId, address indexed market, uint8 outcome)",
+  "event ResolutionFailed(bytes32 indexed requestId, address indexed market, bytes errorData)",
   "function requestMarketResolution(address market) returns (bytes32)",
   "function marketPendingRequest(address) view returns (bytes32)"
 ]);

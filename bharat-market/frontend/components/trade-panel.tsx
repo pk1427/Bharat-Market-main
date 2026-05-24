@@ -1,12 +1,17 @@
 "use client";
 
+import { motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
 import { erc20Abi, parseUnits } from "viem";
 import { useAccount, usePublicClient, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
 
+import { ActionButton } from "@/components/ui/action-button";
+import { Panel } from "@/components/ui/panel";
+import { TxStatusNotice } from "@/components/ui/tx-status-notice";
 import { marketAbi } from "@/lib/abis";
 import { getCappedGasLimit, getSafeFeeOverrides } from "@/lib/fees";
 import { formatShares, formatTxError, formatUsdc } from "@/lib/format";
+import { failTxToast, handleTxToast, settleTxToast } from "@/lib/tx-toasts";
 
 type Side = "yes" | "no";
 
@@ -32,6 +37,7 @@ export function TradePanel({
   const [txKind, setTxKind] = useState<"approve" | "trade" | null>(null);
   const [actionLabel, setActionLabel] = useState<string | null>(null);
   const [allowance, setAllowance] = useState<bigint>(0n);
+  const [toastId, setToastId] = useState<string | number | null>(null);
 
   async function refreshTradeState(currentSide: Side, currentAmount: string) {
     if (!address) {
@@ -137,6 +143,15 @@ export function TradePanel({
     }
 
     if (receipt?.status === "success") {
+      if (txHash && toastId !== null) {
+        settleTxToast({
+          id: toastId,
+          hash: txHash,
+          status: "success",
+          successLabel: "Approval confirmed.",
+          errorLabel: "Approval failed."
+        });
+      }
       void refreshTradeState(side, amount)
         .then(() => {
           setError(null);
@@ -148,9 +163,18 @@ export function TradePanel({
     }
 
     if (receipt?.status === "reverted") {
+      if (txHash && toastId !== null) {
+        settleTxToast({
+          id: toastId,
+          hash: txHash,
+          status: "error",
+          successLabel: "Approval confirmed.",
+          errorLabel: "Approval failed."
+        });
+      }
       setError("Approval failed on-chain.");
     }
-  }, [amount, receipt, side, txHash, txKind, address, marketAddress, disabled]);
+  }, [amount, receipt, side, txHash, txKind, address, marketAddress, disabled, toastId]);
 
   useEffect(() => {
     if (!txHash || txKind !== "trade") {
@@ -158,6 +182,15 @@ export function TradePanel({
     }
 
     if (receipt?.status === "success") {
+      if (txHash && toastId !== null) {
+        settleTxToast({
+          id: toastId,
+          hash: txHash,
+          status: "success",
+          successLabel: side === "yes" ? "YES purchase confirmed." : "NO purchase confirmed.",
+          errorLabel: side === "yes" ? "YES purchase failed." : "NO purchase failed."
+        });
+      }
       onComplete();
       void refreshTradeState(side, "")
         .catch(() => {
@@ -169,9 +202,18 @@ export function TradePanel({
     }
 
     if (receipt?.status === "reverted") {
+      if (txHash && toastId !== null) {
+        settleTxToast({
+          id: toastId,
+          hash: txHash,
+          status: "error",
+          successLabel: side === "yes" ? "YES purchase confirmed." : "NO purchase confirmed.",
+          errorLabel: side === "yes" ? "YES purchase failed." : "NO purchase failed."
+        });
+      }
       setError("Trade failed on-chain. The market may be closed or the transaction may have reverted.");
     }
-  }, [onComplete, receipt, txHash, txKind, side, address, marketAddress, disabled]);
+  }, [onComplete, receipt, txHash, txKind, side, address, marketAddress, disabled, toastId]);
 
   useEffect(() => {
     if (!txHash || txKind !== "trade" || !receiptError) {
@@ -216,7 +258,9 @@ export function TradePanel({
       });
       setTxKind("approve");
       setTxHash(hash);
+      setToastId(handleTxToast({ hash, pendingLabel: "Approving USDC..." }));
     } catch (err) {
+      failTxToast(formatTxError(err));
       setTxKind(null);
       setError(formatTxError(err));
     }
@@ -258,46 +302,71 @@ export function TradePanel({
       });
       setTxKind("trade");
       setTxHash(hash);
+      setToastId(
+        handleTxToast({
+          hash,
+          pendingLabel: side === "yes" ? "Buying YES..." : "Buying NO..."
+        })
+      );
     } catch (err) {
+      failTxToast(formatTxError(err));
       setTxKind(null);
       setError(formatTxError(err));
     }
   }
 
   const busy = isPending || isConfirming;
+  const quickAmounts = ["1", "5", "10", "25"];
+  const projectedPayout = preview;
+  const probabilityShift = parsedAmount > 0n ? `${(Number(preview) / 1_000_000).toFixed(2)} shares` : "--";
 
   return (
-    <div className="glass rounded-[28px] p-5">
+    <Panel glow className="p-5">
       <div>
         <h3 className="font-heading text-2xl uppercase text-white">Trade</h3>
-        <p className="text-sm text-slate-400">Preview shares before sending the transaction.</p>
+        <p className="text-sm text-slate-400">Terminal-grade order entry with live preview, approval state, and payout context.</p>
       </div>
 
       <div className="mt-5 grid gap-3 sm:grid-cols-2">
-        <button
+        <motion.button
           type="button"
           onClick={() => setSide("yes")}
+          whileTap={{ scale: 0.985 }}
           className={`rounded-2xl border px-4 py-3 text-left transition ${
             side === "yes"
-              ? "border-mint/30 bg-mint/15 text-white"
+              ? "border-mint/30 bg-[linear-gradient(135deg,rgba(95,242,191,0.18),rgba(95,242,191,0.05))] text-white shadow-[0_0_22px_rgba(95,242,191,0.12)]"
               : "border-white/10 bg-white/5 text-slate-300"
           }`}
         >
           <p className="text-xs uppercase tracking-[0.25em] text-mint">Buy</p>
           <p className="mt-1 text-lg font-semibold">YES</p>
-        </button>
-        <button
+        </motion.button>
+        <motion.button
           type="button"
           onClick={() => setSide("no")}
+          whileTap={{ scale: 0.985 }}
           className={`rounded-2xl border px-4 py-3 text-left transition ${
             side === "no"
-              ? "border-coral/30 bg-coral/15 text-white"
+              ? "border-coral/30 bg-[linear-gradient(135deg,rgba(255,125,99,0.18),rgba(255,125,99,0.05))] text-white shadow-[0_0_22px_rgba(255,125,99,0.12)]"
               : "border-white/10 bg-white/5 text-slate-300"
           }`}
         >
           <p className="text-xs uppercase tracking-[0.25em] text-coral">Buy</p>
           <p className="mt-1 text-lg font-semibold">NO</p>
-        </button>
+        </motion.button>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        {quickAmounts.map((quick) => (
+          <button
+            key={quick}
+            type="button"
+            onClick={() => setAmount(quick)}
+            className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-[10px] uppercase tracking-[0.28em] text-slate-300 transition hover:border-cyan-400/25 hover:text-white"
+          >
+            {quick} USDC
+          </button>
+        ))}
       </div>
 
       <label className="mt-5 block text-sm text-slate-300">
@@ -310,7 +379,7 @@ export function TradePanel({
         />
       </label>
 
-      <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
+      <div className="mt-4 grid gap-3 rounded-[24px] border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
         <div className="flex items-center justify-between">
           <span>Previewed shares</span>
           <span className="font-semibold text-white">
@@ -321,50 +390,67 @@ export function TradePanel({
           <span>Trade size</span>
           <span>{amount.trim() && parsedAmount > 0n ? formatUsdc(parsedAmount) : "0 USDC"}</span>
         </div>
+        <div className="flex items-center justify-between">
+          <span>Projected payout</span>
+          <span className="font-semibold text-white">{formatShares(projectedPayout)}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span>Position impact</span>
+          <span className="font-semibold text-white">{probabilityShift}</span>
+        </div>
       </div>
 
       {!address ? (
-        <p className="mt-4 text-sm text-gold">Connect your wallet to approve USDC and trade.</p>
+        <TxStatusNotice
+          state="pending"
+          title="Wallet connection required"
+          detail="Connect MetaMask to approve USDC and place a trade."
+        />
       ) : null}
       {disabled ? (
-        <p className="mt-4 text-sm text-coral">Trading is disabled because this market is closed.</p>
+        <TxStatusNotice
+          state="pending"
+          title="Trading closed"
+          detail="This contract is no longer accepting new YES or NO entries. Wait for resolution or review another live market."
+        />
       ) : null}
       {error ? <p className="mt-4 text-sm text-coral">{error}</p> : null}
       {txHash && txKind ? (
-        <p className="mt-4 text-sm text-slate-300">
-          {actionLabel ?? "Transaction"}{" "}
-          {busy
-            ? "is pending"
-            : receipt?.status === "success"
-              ? "confirmed"
-              : receipt?.status === "reverted"
-                ? "failed"
-                : "submitted"}.
-        </p>
+        <TxStatusNotice
+          state={
+            busy ? "pending" : receipt?.status === "success" ? "success" : "error"
+          }
+          title={actionLabel ?? "Transaction"}
+          detail={
+            busy
+              ? "Waiting for confirmation on Polygon Amoy."
+              : receipt?.status === "success"
+                ? "Trade state has been refreshed with the confirmed transaction."
+                : "The transaction reverted on-chain."
+          }
+        />
       ) : null}
 
       <div className="mt-5 grid gap-3 sm:grid-cols-2">
-        <button
-          type="button"
+        <ActionButton
           onClick={handleApprove}
           disabled={!address || !needsApproval || busy || disabled}
-          className="rounded-2xl border border-gold/30 bg-gold/15 px-4 py-3 font-semibold text-gold transition disabled:cursor-not-allowed disabled:opacity-40"
+          tone="gold"
         >
           {busy && actionLabel === "Approving USDC" ? "Approving..." : "Approve USDC"}
-        </button>
-        <button
-          type="button"
+        </ActionButton>
+        <ActionButton
           onClick={handleTrade}
           disabled={!address || needsApproval || busy || disabled || preview <= 0n}
-          className="rounded-2xl border border-mint/30 bg-mint/15 px-4 py-3 font-semibold text-mint transition disabled:cursor-not-allowed disabled:opacity-40"
+          tone={side === "yes" ? "mint" : "coral"}
         >
           {busy && actionLabel !== "Approving USDC"
             ? `${side === "yes" ? "Buying YES" : "Buying NO"}...`
             : side === "yes"
               ? "Buy YES"
               : "Buy NO"}
-        </button>
+        </ActionButton>
       </div>
-    </div>
+    </Panel>
   );
 }

@@ -4,9 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import { erc20Abi, parseUnits } from "viem";
 import { useAccount, usePublicClient, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
 
+import { ActionButton } from "@/components/ui/action-button";
+import { Panel } from "@/components/ui/panel";
+import { TxStatusNotice } from "@/components/ui/tx-status-notice";
 import { marketAbi } from "@/lib/abis";
 import { getCappedGasLimit, getSafeFeeOverrides } from "@/lib/fees";
 import { formatShares, formatTxError } from "@/lib/format";
+import { failTxToast, handleTxToast, settleTxToast } from "@/lib/tx-toasts";
 
 export function LiquidityPanel({
   marketAddress,
@@ -31,6 +35,7 @@ export function LiquidityPanel({
   const [txKind, setTxKind] = useState<"approve" | "add" | "remove" | null>(null);
   const [actionLabel, setActionLabel] = useState<string | null>(null);
   const [allowance, setAllowance] = useState<bigint>(0n);
+  const [toastId, setToastId] = useState<string | number | null>(null);
 
   const parsedAmount = useMemo(() => {
     try {
@@ -61,6 +66,15 @@ export function LiquidityPanel({
     }
 
     if (receipt?.status === "success" && txKind !== "approve") {
+      if (txHash && toastId !== null) {
+        settleTxToast({
+          id: toastId,
+          hash: txHash,
+          status: "success",
+          successLabel: txKind === "add" ? "Liquidity added." : "Liquidity removed.",
+          errorLabel: txKind === "add" ? "Add liquidity failed." : "Remove liquidity failed."
+        });
+      }
       if (txKind === "add") {
         setAmount("");
       }
@@ -68,10 +82,29 @@ export function LiquidityPanel({
       return;
     }
 
+    if (receipt?.status === "success" && txKind === "approve" && txHash && toastId !== null) {
+      settleTxToast({
+        id: toastId,
+        hash: txHash,
+        status: "success",
+        successLabel: "LP approval confirmed.",
+        errorLabel: "LP approval failed."
+      });
+    }
+
     if (receipt?.status === "reverted") {
+      if (txHash && toastId !== null) {
+        settleTxToast({
+          id: toastId,
+          hash: txHash,
+          status: "error",
+          successLabel: "Liquidity transaction confirmed.",
+          errorLabel: "Liquidity transaction failed."
+        });
+      }
       setError("Liquidity transaction failed on-chain.");
     }
-  }, [onComplete, receipt, txHash, txKind]);
+  }, [onComplete, receipt, txHash, txKind, toastId]);
 
   useEffect(() => {
     if (!txHash || !txKind || !receiptError) {
@@ -160,7 +193,9 @@ export function LiquidityPanel({
       });
       setTxKind("approve");
       setTxHash(hash);
+      setToastId(handleTxToast({ hash, pendingLabel: "Approving for LP..." }));
     } catch (err) {
+      failTxToast(formatTxError(err));
       setTxKind(null);
       setError(formatTxError(err));
     }
@@ -201,7 +236,9 @@ export function LiquidityPanel({
       });
       setTxKind("add");
       setTxHash(hash);
+      setToastId(handleTxToast({ hash, pendingLabel: "Adding liquidity..." }));
     } catch (err) {
+      failTxToast(formatTxError(err));
       setTxKind(null);
       setError(formatTxError(err));
     }
@@ -242,14 +279,16 @@ export function LiquidityPanel({
       });
       setTxKind("remove");
       setTxHash(hash);
+      setToastId(handleTxToast({ hash, pendingLabel: "Removing liquidity..." }));
     } catch (err) {
+      failTxToast(formatTxError(err));
       setTxKind(null);
       setError(formatTxError(err));
     }
   }
 
   return (
-    <div className="glass rounded-[28px] p-5">
+    <Panel className="p-5">
       <div>
         <h3 className="font-heading text-2xl uppercase text-white">
           Liquidity
@@ -282,44 +321,44 @@ export function LiquidityPanel({
 
       {error ? <p className="mt-4 text-sm text-coral">{error}</p> : null}
       {txHash && txKind ? (
-        <p className="mt-4 text-sm text-slate-300">
-          {actionLabel ?? "Transaction"}{" "}
-          {busy
-            ? "is pending"
-            : receipt?.status === "success"
-              ? "confirmed"
-              : receipt?.status === "reverted"
-                ? "failed"
-                : "submitted"}.
-        </p>
+        <TxStatusNotice
+          state={
+            busy ? "pending" : receipt?.status === "success" ? "success" : "error"
+          }
+          title={actionLabel ?? "Liquidity transaction"}
+          detail={
+            busy
+              ? "Waiting for liquidity confirmation on Polygon Amoy."
+              : receipt?.status === "success"
+                ? "Market balances have been refreshed from the confirmed transaction."
+                : "The liquidity transaction reverted on-chain."
+          }
+        />
       ) : null}
 
       <div className="mt-5 grid gap-3">
-        <button
-          type="button"
+        <ActionButton
           onClick={handleApprove}
           disabled={!address || !needsApproval || busy || disabled}
-          className="rounded-2xl border border-gold/30 bg-gold/15 px-4 py-3 font-semibold text-gold transition disabled:cursor-not-allowed disabled:opacity-40"
+          tone="gold"
         >
           {busy && actionLabel === "Approving USDC" ? "Approving..." : "Approve for LP"}
-        </button>
-        <button
-          type="button"
+        </ActionButton>
+        <ActionButton
           onClick={handleAddLiquidity}
           disabled={!address || needsApproval || busy || disabled || parsedAmount <= 0n}
-          className="rounded-2xl border border-mint/30 bg-mint/15 px-4 py-3 font-semibold text-mint transition disabled:cursor-not-allowed disabled:opacity-40"
+          tone="mint"
         >
           {busy && actionLabel === "Adding liquidity" ? "Adding..." : "Add Liquidity"}
-        </button>
-        <button
-          type="button"
+        </ActionButton>
+        <ActionButton
           onClick={handleRemoveAllLiquidity}
           disabled={!address || busy || lpBalance <= 0n}
-          className="rounded-2xl border border-coral/30 bg-coral/15 px-4 py-3 font-semibold text-coral transition disabled:cursor-not-allowed disabled:opacity-40"
+          tone="coral"
         >
           {busy && actionLabel === "Removing liquidity" ? "Removing..." : "Remove All Liquidity"}
-        </button>
+        </ActionButton>
       </div>
-    </div>
+    </Panel>
   );
 }

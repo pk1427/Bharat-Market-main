@@ -1,58 +1,140 @@
 "use client";
 
 import Link from "next/link";
+import { motion } from "framer-motion";
+import { ArrowUpRight, Clock3, ShieldCheck, Users, Waves } from "lucide-react";
 
+import { GlowBadge } from "@/components/ui/glow-badge";
+import { Countdown } from "@/components/ui/countdown";
+import { Panel } from "@/components/ui/panel";
+import { ProbabilityBar } from "@/components/ui/probability-bar";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { formatProbabilityNumber, formatPercent, formatUsdcCompact } from "@/lib/format";
+import { isEndingSoon } from "@/lib/market-meta";
 import type { MarketSummary } from "@/lib/market-data";
-import { formatPercent, formatUsdcCompact } from "@/lib/format";
-
-const statusStyles: Record<MarketSummary["status"], string> = {
-  active: "border-mint/20 bg-mint/10 text-mint",
-  awaiting: "border-gold/20 bg-gold/10 text-gold",
-  resolved: "border-coral/20 bg-coral/10 text-coral"
-};
 
 export function MarketCard({ market }: { market: MarketSummary }) {
+  const yesPercent = formatProbabilityNumber(market.yesProbability);
+  const noPercent = formatProbabilityNumber(market.noProbability);
+  const endingSoon = market.status === "active" && isEndingSoon(market.endTime);
+  const trending = market.volume >= 50_000_000n;
+  const statusTone =
+    market.status === "active" ? "mint" : market.status === "awaiting" ? "gold" : "coral";
+  const topMeta =
+    market.status === "active"
+      ? { label: <Countdown endTime={market.endTime} />, className: "border-violet-500/35 bg-violet-500/10 text-white" }
+      : market.status === "awaiting"
+        ? { label: "Resolution pending", className: "border-gold/25 bg-gold/10 text-gold" }
+        : {
+            label:
+              market.resolvedOutcome === 1
+                ? "Resolved YES"
+                : market.resolvedOutcome === 2
+                  ? "Resolved NO"
+                  : "Resolved",
+            className: "border-mint/25 bg-mint/10 text-mint"
+          };
+  const contextLine =
+    market.status === "active"
+      ? `${market.oracleSource} settlement • closes ${market.endTimeLabel}`
+      : market.status === "awaiting"
+        ? `Trading closed • waiting for ${market.oracleSource} resolution`
+        : `Resolved by ${market.oracleSource} • market archived`;
+
   return (
-    <Link
-      href={`/markets/${market.address}`}
-      className="glass group block rounded-[28px] p-5 transition duration-200 hover:-translate-y-1 hover:border-white/20 hover:bg-slate-900/80"
-    >
-      <div className="flex items-start justify-between gap-4">
-        <span
-          className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.25em] ${statusStyles[market.status]}`}
-        >
-          {market.statusLabel}
-        </span>
-        <span className="text-xs uppercase tracking-[0.25em] text-slate-500">
-          {market.endTimeLabel}
-        </span>
-      </div>
-
-      <div className="mt-5 space-y-4">
-        <h3 className="font-heading min-h-[72px] text-3xl uppercase leading-tight text-white">
-          {market.question}
-        </h3>
-
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="rounded-2xl border border-mint/15 bg-mint/10 p-4">
-            <p className="text-xs uppercase tracking-[0.25em] text-mint">Yes Odds</p>
-            <p className="mt-2 text-2xl font-semibold text-white">
-              {formatPercent(market.yesProbability)}
-            </p>
+    <motion.div whileHover={{ y: -5 }} transition={{ duration: 0.2 }}>
+      <Link href={`/markets/${market.address}`} className="group block">
+        <Panel hover className="h-full p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge label={market.statusLabel} tone={statusTone} />
+              <GlowBadge label={market.category} tone="slate" />
+              {trending ? <GlowBadge label="Trending" tone="gold" pulse /> : null}
+              {endingSoon ? <GlowBadge label="Ending Soon" tone="coral" pulse /> : null}
+            </div>
+            <div className={`rounded-full border px-4 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.12em] ${topMeta.className}`}>
+              <p>{topMeta.label}</p>
+            </div>
           </div>
-          <div className="rounded-2xl border border-coral/15 bg-coral/10 p-4">
-            <p className="text-xs uppercase tracking-[0.25em] text-coral">No Odds</p>
-            <p className="mt-2 text-2xl font-semibold text-white">
-              {formatPercent(market.noProbability)}
-            </p>
-          </div>
-        </div>
 
-        <div className="flex items-center justify-between text-sm text-slate-400">
-          <span>Liquidity {formatUsdcCompact(market.liquidity)}</span>
-          <span className="transition group-hover:text-white">Open market →</span>
-        </div>
+          <div className="mt-5 space-y-5">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-4">
+                <h3 className="min-h-[72px] text-[1.85rem] font-semibold leading-[1.08] tracking-[-0.04em] text-white transition group-hover:text-violet-200">
+                  {market.question}
+                </h3>
+                <ArrowUpRight className="mt-2 h-5 w-5 shrink-0 text-slate-500 transition group-hover:text-violet-300" />
+              </div>
+              <p className="text-sm leading-6 text-slate-500">{contextLine}</p>
+
+              <div className="rounded-[16px] border border-white/8 bg-white/[0.03] p-4">
+                <div className="flex items-end justify-between">
+                  <div>
+                    <p className="text-[9px] uppercase tracking-[0.24em] text-slate-500">Implied Probability</p>
+                    <div className="mt-2 flex items-end gap-4">
+                      <div>
+                        <p className="font-mono text-4xl font-semibold tracking-tight text-mint">
+                          {formatPercent(market.yesProbability)}
+                        </p>
+                        <p className="mt-1 text-[10px] uppercase tracking-[0.32em] text-slate-500">YES</p>
+                      </div>
+                      <div className="pb-1 text-right">
+                        <p className="font-mono text-xl font-semibold text-coral">
+                          {formatPercent(market.noProbability)}
+                        </p>
+                        <p className="mt-1 text-[10px] uppercase tracking-[0.32em] text-slate-500">NO</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="rounded-[12px] border border-white/8 bg-white/[0.03] px-3 py-2">
+                    <p className="text-[9px] uppercase tracking-[0.24em] text-slate-500">Momentum</p>
+                    <p className="mt-1 font-mono text-sm font-semibold text-white">
+                      {Math.abs(yesPercent - 50).toFixed(1)}%
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <ProbabilityBar yesPercent={yesPercent} noPercent={noPercent} />
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <InfoPill icon={Waves} label="Liquidity" value={formatUsdcCompact(market.liquidity)} />
+              <InfoPill icon={ArrowUpRight} label="24H Volume" value={formatUsdcCompact(market.volume)} />
+              <InfoPill icon={Users} label="Traders" value={String(market.traderCount)} />
+              <InfoPill icon={market.status === "resolved" ? ShieldCheck : Clock3} label={market.status === "resolved" ? "Outcome" : "Oracle"} value={market.status === "resolved" ? (market.resolvedOutcome === 1 ? "YES" : market.resolvedOutcome === 2 ? "NO" : "Pending") : market.oracleSource} />
+            </div>
+
+            <div className="flex items-center justify-between text-xs uppercase tracking-[0.2em] text-slate-400">
+              <span>{market.endTimeLabel}</span>
+              <span className="text-white transition group-hover:text-violet-300">
+                {market.status === "resolved" ? "Review market" : "Open market"}
+              </span>
+            </div>
+          </div>
+        </Panel>
+      </Link>
+    </motion.div>
+  );
+}
+
+function InfoPill({
+  icon: Icon,
+  label,
+  value
+}: {
+  icon: typeof ArrowUpRight;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-[12px] border border-white/8 bg-white/[0.03] p-3">
+      <div className="flex items-center gap-2 text-slate-500">
+        <Icon className="h-3.5 w-3.5" />
+        <p className="text-[9px] uppercase tracking-[0.22em]">{label}</p>
       </div>
-    </Link>
+      <p className="mt-2 font-mono text-sm font-semibold text-white">{value}</p>
+    </div>
   );
 }

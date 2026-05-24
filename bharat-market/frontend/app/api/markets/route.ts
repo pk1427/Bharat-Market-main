@@ -5,10 +5,24 @@ import {
   fetchMarketSummaries,
   serializeMarketSummary
 } from "@/lib/market-data";
-import { getCachedSummaries, setCachedSummaries } from "@/lib/server/market-cache";
+import {
+  getCachedSummaries,
+  isFresh,
+  setCachedSummaries
+} from "@/lib/server/market-cache";
 import { getServerPublicClient } from "@/lib/server/public-client";
 
-export async function GET() {
+const SUMMARY_TTL_MS = 120_000;
+
+async function buildMarketBoardSnapshot(marketFactory: `0x${string}`) {
+  const publicClient = getServerPublicClient();
+  const markets = await fetchMarketSummaries(publicClient, marketFactory);
+  const payload = markets.map(serializeMarketSummary);
+  await setCachedSummaries(payload);
+  return payload;
+}
+
+export async function GET(request: Request) {
   const addresses = getRequiredAddresses();
 
   if (!addresses) {
@@ -19,11 +33,25 @@ export async function GET() {
   }
 
   try {
-    const publicClient = getServerPublicClient();
-    const markets = await fetchMarketSummaries(publicClient, addresses.marketFactory);
-    const payload = markets.map(serializeMarketSummary);
+    const requestUrl = new URL(request.url);
+    const forceFresh = requestUrl.searchParams.get("fresh") === "1";
+    const cached = await getCachedSummaries();
+    if (!forceFresh && cached) {
+      if (!isFresh(cached.updatedAt, SUMMARY_TTL_MS)) {
+        void buildMarketBoardSnapshot(addresses.marketFactory).catch(() => {
+          // Keep serving the last good backend snapshot if refresh fails.
+        });
+      }
 
-    await setCachedSummaries(payload);
+      return NextResponse.json({
+        markets: cached.data,
+        stale: !isFresh(cached.updatedAt, SUMMARY_TTL_MS),
+        updatedAt: cached.updatedAt,
+        cached: true
+      });
+    }
+
+    const payload = await buildMarketBoardSnapshot(addresses.marketFactory);
 
     return NextResponse.json({
       markets: payload,
