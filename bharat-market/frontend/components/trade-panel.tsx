@@ -321,13 +321,17 @@ export function TradePanel({
   const probabilityShift = parsedAmount > 0n ? `${(Number(preview) / 1_000_000).toFixed(2)} shares` : "--";
 
   return (
-    <Panel glow className="p-5">
+    <Panel glow className="overflow-hidden p-0">
       <div>
-        <h3 className="font-heading text-2xl uppercase text-white">Trade</h3>
-        <p className="text-sm text-slate-400">Terminal-grade order entry with live preview, approval state, and payout context.</p>
+        <div className="border-b border-white/6 px-5 py-5">
+          <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">Execution</p>
+          <h3 className="mt-2 font-heading text-2xl uppercase text-white">Trade</h3>
+          <p className="mt-2 text-sm text-slate-400">Terminal-grade order entry with live preview, approval state, and payout context.</p>
+        </div>
       </div>
 
-      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+      <div className="space-y-5 px-5 py-5">
+      <div className="grid gap-3 sm:grid-cols-2">
         <motion.button
           type="button"
           onClick={() => setSide("yes")}
@@ -356,7 +360,7 @@ export function TradePanel({
         </motion.button>
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2">
         {quickAmounts.map((quick) => (
           <button
             key={quick}
@@ -369,7 +373,7 @@ export function TradePanel({
         ))}
       </div>
 
-      <label className="mt-5 block text-sm text-slate-300">
+      <label className="block text-sm text-slate-300">
         USDC amount
         <input
           value={amount}
@@ -379,7 +383,7 @@ export function TradePanel({
         />
       </label>
 
-      <div className="mt-4 grid gap-3 rounded-[24px] border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
+      <div className="grid gap-3 rounded-[24px] bg-white/[0.04] p-4 text-sm text-slate-300">
         <div className="flex items-center justify-between">
           <span>Previewed shares</span>
           <span className="font-semibold text-white">
@@ -431,7 +435,7 @@ export function TradePanel({
         />
       ) : null}
 
-      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2">
         <ActionButton
           onClick={handleApprove}
           disabled={!address || !needsApproval || busy || disabled}
@@ -450,6 +454,7 @@ export function TradePanel({
               ? "Buy YES"
               : "Buy NO"}
         </ActionButton>
+      </div>
       </div>
     </Panel>
   );

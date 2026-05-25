@@ -288,17 +288,21 @@ export function LiquidityPanel({
   }
 
   return (
-    <Panel className="p-5">
+    <Panel className="overflow-hidden p-0">
       <div>
-        <h3 className="font-heading text-2xl uppercase text-white">
-          Liquidity
-        </h3>
-        <p className="text-sm text-slate-400">
-          Optional LP controls for supplying and withdrawing USDC from the pool.
-        </p>
+        <div className="border-b border-white/6 px-5 py-5">
+          <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">Liquidity</p>
+          <h3 className="mt-2 font-heading text-2xl uppercase text-white">
+            Liquidity
+          </h3>
+          <p className="mt-2 text-sm text-slate-400">
+            Optional LP controls for supplying and withdrawing USDC from the pool.
+          </p>
+        </div>
       </div>
 
-      <label className="mt-5 block text-sm text-slate-300">
+      <div className="space-y-5 px-5 py-5">
+      <label className="block text-sm text-slate-300">
         Add liquidity in USDC
         <input
           value={amount}
@@ -308,7 +312,7 @@ export function LiquidityPanel({
         />
       </label>
 
-      <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
+      <div className="rounded-2xl bg-white/[0.04] p-4 text-sm text-slate-300">
         <div className="flex items-center justify-between">
           <span>Your LP balance</span>
           <span className="font-semibold text-white">{formatShares(lpBalance)}</span>
@@ -336,7 +340,7 @@ export function LiquidityPanel({
         />
       ) : null}
 
-      <div className="mt-5 grid gap-3">
+      <div className="grid gap-3">
         <ActionButton
           onClick={handleApprove}
           disabled={!address || !needsApproval || busy || disabled}
@@ -358,6 +362,7 @@ export function LiquidityPanel({
         >
           {busy && actionLabel === "Removing liquidity" ? "Removing..." : "Remove All Liquidity"}
         </ActionButton>
+      </div>
       </div>
     </Panel>
   );

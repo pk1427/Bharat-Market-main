@@ -5,10 +5,10 @@ import { cn } from "@/lib/utils";
 type Tone = "mint" | "coral" | "gold" | "slate";
 
 const toneMap: Record<Tone, string> = {
-  mint: "border-mint/20 bg-mint/10 text-mint",
-  coral: "border-coral/20 bg-coral/10 text-coral",
-  gold: "border-gold/20 bg-gold/10 text-gold",
-  slate: "border-white/10 bg-white/5 text-slate-300"
+  mint: "border-mint/16 bg-mint/10 text-mint shadow-[0_0_16px_rgba(95,242,191,0.08)]",
+  coral: "border-coral/16 bg-coral/10 text-coral shadow-[0_0_16px_rgba(255,125,99,0.08)]",
+  gold: "border-gold/16 bg-gold/10 text-gold shadow-[0_0_16px_rgba(245,201,107,0.08)]",
+  slate: "border-white/8 bg-white/[0.045] text-slate-300"
 };
 
 export function StatusBadge({
@@ -23,7 +23,7 @@ export function StatusBadge({
   return (
     <span
       className={cn(
-        "inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.25em]",
+        "inline-flex rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em]",
         toneMap[tone],
         className
       )}

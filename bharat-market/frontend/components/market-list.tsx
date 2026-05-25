@@ -99,6 +99,7 @@ export function MarketList({
         </div>
       ) : null}
 
+      <div className="rounded-[24px] bg-[linear-gradient(180deg,rgba(16,18,29,0.92),rgba(11,13,22,0.96))] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
       <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
         <label className="relative block">
           <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
@@ -106,7 +107,7 @@ export function MarketList({
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search by market question, category, or oracle query..."
-            className="w-full rounded-[16px] border border-white/10 bg-white/[0.03] py-3 pl-11 pr-4 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-violet-400/30"
+            className="w-full rounded-[16px] border border-white/8 bg-white/[0.04] py-3 pl-11 pr-4 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-violet-400/30"
           />
         </label>
 
@@ -133,6 +134,7 @@ export function MarketList({
           />
         </div>
       </div>
+      </div>
 
       {filteredMarkets.length === 0 ? (
         <EmptyState
@@ -140,7 +142,7 @@ export function MarketList({
           description="Try a different search or switch board views to surface more contracts."
         />
       ) : (
-      <div className="grid gap-5 xl:grid-cols-2 2xl:grid-cols-3">
+      <div className="grid gap-4 xl:grid-cols-2 2xl:grid-cols-3">
         {filteredMarkets.map((market) => (
           <MarketCard key={market.address} market={market} />
         ))}

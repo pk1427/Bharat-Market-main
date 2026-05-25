@@ -66,7 +66,7 @@ export function ActivityFeed({ marketAddress }: { marketAddress: string }) {
   }
 
   return (
-    <Panel className="p-5">
+    <Panel className="overflow-hidden p-0">
       <SectionHeader
         eyebrow="Live Tape"
         title="Activity Feed"
@@ -89,6 +89,7 @@ export function ActivityFeed({ marketAddress }: { marketAddress: string }) {
         }
       />
 
+      <div className="border-b border-white/6 px-5 pb-4">
       <div className="mt-4 flex flex-wrap gap-2">
         {(["all", "trades", "liquidity", "resolution", "redeemed", "created"] as ActivityFilter[]).map(
           (item) => (
@@ -107,8 +108,9 @@ export function ActivityFeed({ marketAddress }: { marketAddress: string }) {
           )
         )}
       </div>
+      </div>
 
-      <div className="mt-5 space-y-3">
+      <div className="space-y-3 px-5 py-5">
         {activity.data.warning ? (
           <div className="rounded-2xl border border-gold/20 bg-gold/10 px-4 py-3 text-sm text-gold">
             Activity is temporarily using a degraded data path because Amoy RPC limited recent event lookups.
@@ -123,8 +125,8 @@ export function ActivityFeed({ marketAddress }: { marketAddress: string }) {
         {filteredItems.map((item) => (
           <div
             key={item.id}
-            className={`rounded-2xl border p-4 ${
-              item.whale ? "border-gold/30 bg-gold/10" : "border-white/10 bg-white/5"
+            className={`rounded-[18px] px-4 py-4 ${
+              item.whale ? "bg-[linear-gradient(135deg,rgba(245,158,11,0.14),rgba(245,158,11,0.05))]" : "bg-white/[0.035]"
             }`}
           >
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

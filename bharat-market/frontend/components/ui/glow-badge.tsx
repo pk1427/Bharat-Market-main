@@ -16,10 +16,10 @@ export function GlowBadge({
   className?: string;
 }) {
   const toneMap = {
-    mint: "border-mint/25 bg-mint/12 text-mint",
-    coral: "border-coral/25 bg-coral/12 text-coral",
-    gold: "border-gold/25 bg-gold/12 text-gold",
-    slate: "border-white/10 bg-white/6 text-slate-200"
+    mint: "border-mint/20 bg-mint/12 text-mint shadow-[0_0_18px_rgba(95,242,191,0.08)]",
+    coral: "border-coral/20 bg-coral/12 text-coral shadow-[0_0_18px_rgba(255,125,99,0.08)]",
+    gold: "border-gold/20 bg-gold/12 text-gold shadow-[0_0_18px_rgba(245,201,107,0.08)]",
+    slate: "border-white/8 bg-white/[0.05] text-slate-200"
   };
 
   return (

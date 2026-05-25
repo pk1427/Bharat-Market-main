@@ -6,6 +6,9 @@ import {
   Activity,
   ArrowUpRight,
   Clock3,
+  Dot,
+  Gauge,
+  LineChart,
   ShieldCheck,
   TrendingUp,
   Users,
@@ -27,7 +30,6 @@ import { TradePanel } from "@/components/trade-panel";
 import { GlowBadge } from "@/components/ui/glow-badge";
 import { MetricCard } from "@/components/ui/metric-card";
 import { Panel } from "@/components/ui/panel";
-import { SectionHeader } from "@/components/ui/section-header";
 import { TxStatusNotice } from "@/components/ui/tx-status-notice";
 import { marketAbi } from "@/lib/abis";
 import { getRequiredAddresses } from "@/lib/contracts";
@@ -59,11 +61,9 @@ export function MarketDetail({ address }: { address: string }) {
   const [redeemHash, setRedeemHash] = useState<`0x${string}` | undefined>();
   const [redeemError, setRedeemError] = useState<string | null>(null);
   const [redeemToastId, setRedeemToastId] = useState<string | number | null>(null);
-  const [refreshTick, setRefreshTick] = useState(0);
   const [pendingRequest, setPendingRequest] = useState<`0x${string}` | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const marketRef = useRef<MarketDetailData | null>(null);
-  const marketClosed = market ? market.status !== "active" : false;
   const marketHistory = useMarketHistory(market);
 
   const addresses = getRequiredAddresses();
@@ -133,7 +133,7 @@ export function MarketDetail({ address }: { address: string }) {
 
   useEffect(() => {
     void loadDetail();
-  }, [loadDetail, refreshTick]);
+  }, [loadDetail]);
 
   useEffect(() => {
     if (!market) {
@@ -235,15 +235,16 @@ export function MarketDetail({ address }: { address: string }) {
   const redeemableBalance =
     market.winningOutcome === 1 ? market.yesBalance : market.winningOutcome === 2 ? market.noBalance : 0n;
   const yesPercent = formatProbabilityNumber(market.yesProbability);
-  const noPercent = formatProbabilityNumber(market.noProbability);
+  const volatility = Math.abs(yesPercent - 50).toFixed(1);
   const momentum = yesPercent >= 50 ? "YES momentum" : "NO momentum";
   const sentiment = yesPercent >= 60 ? "Bullish YES" : yesPercent <= 40 ? "Defensive NO" : "Balanced";
-  const volatility = Math.abs(yesPercent - 50).toFixed(1);
+  const dominance = yesPercent >= 50 ? "YES" : "NO";
+  const marketClosed = market.status !== "active";
   const marketStateCopy =
     market.status === "active"
       ? "Trading is open and BharatMarket is streaming pricing, liquidity depth, and wallet exposure."
       : market.status === "awaiting"
-        ? "Trading is closed. The contract is waiting for oracle resolution and redemption will unlock once the outcome is finalized."
+        ? "Trading is closed. The contract is waiting for oracle resolution and redemption unlocks once the outcome is finalized."
         : "This market has resolved. Final balances, winning outcome, and redemption state are shown below.";
 
   return (
@@ -261,100 +262,125 @@ export function MarketDetail({ address }: { address: string }) {
         </button>
       </div>
 
-      <Panel glow className="surface-mask rounded-[32px] p-6 sm:p-8">
-        <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-          <div className="space-y-6">
+      <Panel glow className="surface-mask overflow-hidden rounded-[34px] p-0">
+        <div className="grid xl:grid-cols-[minmax(0,1.35fr)_430px]">
+          <div className="space-y-8 px-6 py-7 sm:px-8 sm:py-8">
             <div className="flex flex-wrap items-center gap-3">
-              <GlowBadge label={market.statusLabel} tone={market.status === "active" ? "mint" : market.status === "awaiting" ? "gold" : "coral"} pulse={market.status === "active"} />
+              <GlowBadge
+                label={market.statusLabel}
+                tone={market.status === "active" ? "mint" : market.status === "awaiting" ? "gold" : "coral"}
+                pulse={market.status === "active"}
+              />
               <GlowBadge label={market.category} tone="slate" />
               <GlowBadge label={momentum} tone={yesPercent >= 50 ? "mint" : "coral"} />
               <GlowBadge label={sentiment} tone="gold" />
             </div>
 
-            <div className="space-y-4">
-              <h1 className="font-heading max-w-5xl text-4xl uppercase leading-[1.02] tracking-[0.03em] text-white sm:text-6xl">
-                {market.question}
-              </h1>
-              <p className="max-w-4xl text-sm leading-7 text-slate-300">
-                Market address {shortenAddress(market.address)} • Expires {formatTimestamp(market.endTime)}
-              </p>
-              <p className="max-w-4xl text-sm leading-7 text-slate-400">
-                {marketStateCopy}
-              </p>
-            </div>
-
-            <div className="grid gap-4 lg:grid-cols-[0.66fr_0.34fr]">
+            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_280px] xl:items-start">
               <motion.div
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="rounded-[28px] border border-white/8 bg-slate-950/60 p-5"
+                className="rounded-[32px] bg-[radial-gradient(circle_at_top_left,rgba(95,242,191,0.18),transparent_42%),linear-gradient(180deg,rgba(6,8,18,0.92),rgba(12,14,24,0.96))] p-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
               >
-                <p className="text-[10px] uppercase tracking-[0.4em] text-slate-500">Implied Market Probability</p>
-                <div className="mt-4 flex flex-wrap items-end gap-6">
-                  <div>
-                    <p className="font-mono text-[4rem] font-semibold leading-none tracking-tight text-mint sm:text-[5.2rem]">
+                <p className="text-[10px] uppercase tracking-[0.38em] text-slate-500">Probability Terminal</p>
+                <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
+                  <div className="space-y-4">
+                    <h1 className="font-heading max-w-5xl text-[3.2rem] leading-[0.92] tracking-[-0.05em] text-white sm:text-[4.8rem]">
+                      {market.question}
+                    </h1>
+                    <p className="max-w-3xl text-sm leading-7 text-slate-400">
+                      Market address {shortenAddress(market.address)} • Expires {formatTimestamp(market.endTime)}
+                    </p>
+                    <p className="max-w-3xl text-sm leading-7 text-slate-300">{marketStateCopy}</p>
+                  </div>
+
+                  <div className="text-right">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-mint/20 bg-mint/10 px-3 py-2 text-[11px] uppercase tracking-[0.22em] text-mint">
+                      <TrendingUp className="h-3.5 w-3.5" />
+                      {dominance} in control
+                    </div>
+                    <p className="mt-4 font-mono text-[4.9rem] font-semibold leading-none tracking-tight text-mint sm:text-[6.6rem]">
                       {formatPercent(market.yesProbability)}
                     </p>
-                    <p className="mt-2 text-xs uppercase tracking-[0.35em] text-mint">YES</p>
-                  </div>
-                  <div className="pb-2">
-                    <p className="font-mono text-3xl font-semibold text-coral">{formatPercent(market.noProbability)}</p>
-                    <p className="mt-2 text-xs uppercase tracking-[0.35em] text-coral">NO</p>
+                    <div className="mt-3 flex items-center justify-end gap-4 text-xs uppercase tracking-[0.3em]">
+                      <span className="text-mint">YES</span>
+                      <span className="text-coral">{formatPercent(market.noProbability)} NO</span>
+                    </div>
                   </div>
                 </div>
-                <div className="mt-4 flex items-center gap-3 text-sm text-slate-400">
-                  <TrendingUp className="h-4 w-4 text-cyan-300" />
-                  <span>{momentum}</span>
-                  <span className="font-mono text-white">{volatility}% from neutral</span>
+
+                <div className="mt-6 grid gap-3 lg:grid-cols-4">
+                  <InlineMetric label="Momentum" value={`${volatility}%`} helper="from neutral 50/50" tone="slate" />
+                  <InlineMetric label="Volume" value={formatUsdc(market.volume)} helper="aggregate notional" tone="cyan" />
+                  <InlineMetric label="Liquidity" value={formatUsdc(market.liquidity)} helper="pool depth" tone="gold" />
+                  <InlineMetric label="Settlement" value={market.resolved ? market.winningLabel : "Pending"} helper={market.statusLabel} tone="slate" />
                 </div>
               </motion.div>
 
               <div className="grid gap-4">
-                <MetricCard label="Volume" value={formatUsdc(market.volume)} helper="Aggregate traded notional" tone="cyan" />
-                <MetricCard label="Liquidity" value={formatUsdc(market.liquidity)} helper="Available pool depth" tone="gold" />
+                <MetricCard label="YES" value={formatPercent(market.yesProbability)} helper="probability" tone="mint" />
+                <MetricCard label="NO" value={formatPercent(market.noProbability)} helper="probability" tone="coral" />
               </div>
             </div>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-1">
-            <MetricPanel icon={Waves} label="Oracle Route" value={market.oracleType} helper={market.oracleQuery} />
-            <MetricPanel icon={ShieldCheck} label="Oracle Source" value={market.oracleSource} helper="Resolution provider for this contract" />
-            <MetricPanel icon={Users} label="Participants" value={String(market.traderCount)} helper="Unique wallets that executed buys" />
-            <MetricPanel icon={Clock3} label="Expiry" value={formatTimestamp(market.endTime)} helper={market.endTimeLabel} />
-            <MetricPanel icon={Activity} label="Volatility" value={`${volatility}%`} helper="Distance from a neutral 50/50 market" />
-            <MetricPanel icon={ArrowUpRight} label="Settlement" value={market.resolved ? market.winningLabel : "Pending"} helper={market.statusLabel} />
+          <div className="border-t border-white/6 bg-black/15 px-6 py-7 sm:px-8 xl:border-l xl:border-t-0">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
+              <MetricPanel icon={Waves} label="Oracle Route" value={market.oracleType} helper={market.oracleQuery} />
+              <MetricPanel icon={ShieldCheck} label="Oracle Source" value={market.oracleSource} helper="Resolution provider for this contract" />
+              <MetricPanel icon={Users} label="Participants" value={String(market.traderCount)} helper="Unique wallets that executed buys" />
+              <MetricPanel icon={Clock3} label="Expiry" value={formatTimestamp(market.endTime)} helper={market.endTimeLabel} />
+              <MetricPanel icon={Gauge} label="Volatility" value={`${volatility}%`} helper="Distance from neutral" />
+              <MetricPanel icon={ArrowUpRight} label="Settlement" value={market.resolved ? market.winningLabel : "Pending"} helper={market.statusLabel} />
+            </div>
           </div>
         </div>
+
         {warning ? (
-          <p className="mt-5 text-sm text-gold">
+          <p className="border-t border-white/6 px-6 py-4 text-sm text-gold sm:px-8">
             Showing cached backend data because Polygon Amoy RPC is unstable right now.
           </p>
         ) : null}
       </Panel>
 
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.75fr)] xl:items-start">
+      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.65fr)_minmax(355px,0.75fr)] xl:items-start">
         <div className="space-y-6">
-          <SectionHeader
-            eyebrow="Market Terminal"
-            title="Chart, Flow, and Resolution"
-            description="Track live price history, current liquidity state, and settlement readiness from one terminal view."
-          />
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(260px,0.8fr)]">
+            <div className="rounded-[28px] bg-[linear-gradient(180deg,rgba(15,19,31,0.96),rgba(9,12,20,0.94))] px-5 py-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+              <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.28em] text-slate-500">
+                <LineChart className="h-3.5 w-3.5 text-cyan-300" />
+                Chart, Flow, and Resolution
+              </div>
+              <p className="mt-3 text-sm leading-7 text-slate-300">
+                The chart is the center of this market. Use the movement curve, live tape, and snapshot metrics below to understand sentiment before you trade or wait for settlement.
+              </p>
+            </div>
+            <div className="rounded-[28px] bg-[linear-gradient(180deg,rgba(15,19,31,0.96),rgba(9,12,20,0.94))] px-5 py-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+              <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">Probability Pulse</p>
+              <div className="mt-4 flex items-center justify-between text-sm text-slate-400">
+                <span className="inline-flex items-center gap-2"><Dot className="h-4 w-4 text-mint" /> YES</span>
+                <span className="font-mono text-2xl text-mint">{formatPercent(market.yesProbability)}</span>
+              </div>
+              <div className="mt-3 flex items-center justify-between text-sm text-slate-400">
+                <span className="inline-flex items-center gap-2"><Dot className="h-4 w-4 text-coral" /> NO</span>
+                <span className="font-mono text-2xl text-coral">{formatPercent(market.noProbability)}</span>
+              </div>
+            </div>
+          </div>
+
           <MarketPriceChart
             history={marketHistory.history}
             loading={marketHistory.isLoading}
             warning={marketHistory.warning}
           />
-          <Panel className="p-5">
-            <div>
-              <h2 className="font-heading text-2xl uppercase text-white">
-                Market Snapshot
-              </h2>
-              <p className="text-sm text-slate-400">
-                Live contract reads pulled from the deployed market.
-              </p>
+
+          <Panel className="overflow-hidden p-0">
+            <div className="border-b border-white/6 px-5 py-5">
+              <h2 className="font-heading text-2xl uppercase text-white">Market Snapshot</h2>
+              <p className="mt-2 text-sm text-slate-400">Live contract reads pulled from the deployed market.</p>
             </div>
 
-            <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 px-5 py-5 md:grid-cols-2">
               <DataRow label="YES Pool" value={formatUsdc(market.yesPool)} />
               <DataRow label="NO Pool" value={formatUsdc(market.noPool)} />
               <DataRow label="YES Token Balance" value={formatShares(market.yesBalance)} />
@@ -364,56 +390,54 @@ export function MarketDetail({ address }: { address: string }) {
             </div>
           </Panel>
 
-          <Panel className="p-5">
-            <div>
-              <h2 className="font-heading text-2xl uppercase text-white">
-                Redeem
-              </h2>
-              <p className="text-sm text-slate-400">
-                Only holders of the winning side can redeem after resolution.
-              </p>
+          <Panel className="overflow-hidden p-0">
+            <div className="border-b border-white/6 px-5 py-5">
+              <h2 className="font-heading text-2xl uppercase text-white">Redeem</h2>
+              <p className="mt-2 text-sm text-slate-400">Only holders of the winning side can redeem after resolution.</p>
             </div>
 
-            <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
-              <div className="flex items-center justify-between">
-                <span>Resolved</span>
-                <span className="font-semibold text-white">{market.resolved ? "Yes" : "No"}</span>
+            <div className="space-y-5 px-5 py-5">
+              <div className="rounded-2xl bg-white/[0.04] p-4 text-sm text-slate-300">
+                <div className="flex items-center justify-between">
+                  <span>Resolved</span>
+                  <span className="font-semibold text-white">{market.resolved ? "Yes" : "No"}</span>
+                </div>
+                <div className="mt-2 flex items-center justify-between">
+                  <span>Redeemable balance</span>
+                  <span className="font-semibold text-white">{formatShares(redeemableBalance)}</span>
+                </div>
               </div>
-              <div className="mt-2 flex items-center justify-between">
-                <span>Redeemable balance</span>
-                <span className="font-semibold text-white">{formatShares(redeemableBalance)}</span>
-              </div>
+
+              {redeemError ? <p className="text-sm text-coral">{redeemError}</p> : null}
+              {redeemHash ? (
+                <TxStatusNotice
+                  state={
+                    redeemBusy
+                      ? "pending"
+                      : redeemReceipt?.status === "success"
+                        ? "success"
+                        : "error"
+                  }
+                  title="Redeem winnings"
+                  detail={
+                    redeemBusy
+                      ? "Waiting for the redemption transaction to finalize on Polygon Amoy."
+                      : redeemReceipt?.status === "success"
+                        ? "Winning collateral has been redeemed successfully."
+                        : "Redemption reverted on-chain."
+                  }
+                />
+              ) : null}
+
+              <button
+                type="button"
+                onClick={handleRedeem}
+                disabled={!market.resolved || redeemableBalance <= 0n || redeemBusy}
+                className="w-full rounded-2xl border border-gold/30 bg-gold/15 px-4 py-3 font-semibold text-gold transition disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {redeemBusy ? "Redeeming..." : "Redeem Winnings"}
+              </button>
             </div>
-
-            {redeemError ? <p className="mt-4 text-sm text-coral">{redeemError}</p> : null}
-            {redeemHash ? (
-              <TxStatusNotice
-                state={
-                  redeemBusy
-                    ? "pending"
-                    : redeemReceipt?.status === "success"
-                      ? "success"
-                      : "error"
-                }
-                title="Redeem winnings"
-                detail={
-                  redeemBusy
-                    ? "Waiting for the redemption transaction to finalize on Polygon Amoy."
-                    : redeemReceipt?.status === "success"
-                      ? "Winning collateral has been redeemed successfully."
-                      : "Redemption reverted on-chain."
-                }
-              />
-            ) : null}
-
-            <button
-              type="button"
-              onClick={handleRedeem}
-              disabled={!market.resolved || redeemableBalance <= 0n || redeemBusy}
-              className="mt-5 w-full rounded-2xl border border-gold/30 bg-gold/15 px-4 py-3 font-semibold text-gold transition disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {redeemBusy ? "Redeeming..." : "Redeem Winnings"}
-            </button>
           </Panel>
 
           <div id="activity">
@@ -422,8 +446,12 @@ export function MarketDetail({ address }: { address: string }) {
         </div>
 
         <div className="space-y-6 xl:sticky xl:top-28">
-          <Panel glow className="p-4">
-            <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
+          <Panel glow className="overflow-hidden p-0">
+            <div className="border-b border-white/6 px-5 py-5">
+              <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">Wallet Exposure</p>
+              <h3 className="mt-2 font-heading text-2xl uppercase text-white">Position Summary</h3>
+            </div>
+            <div className="grid gap-3 px-5 py-5 sm:grid-cols-3 xl:grid-cols-1">
               <MetricCard label="Wallet USDC" value={formatUsdc(market.usdcBalance)} helper="Available collateral" tone="slate" />
               <MetricCard label="YES Exposure" value={formatShares(market.yesBalance)} helper="Held YES shares" tone="mint" />
               <MetricCard label="NO Exposure" value={formatShares(market.noBalance)} helper="Held NO shares" tone="coral" />
@@ -458,35 +486,11 @@ export function MarketDetail({ address }: { address: string }) {
   );
 }
 
-function Stat({
-  label,
-  value,
-  tone
-}: {
-  label: string;
-  value: string;
-  tone: "mint" | "coral" | "gold" | "slate";
-}) {
-  const toneStyles = {
-    mint: "border-mint/20 bg-mint/10 text-mint",
-    coral: "border-coral/20 bg-coral/10 text-coral",
-    gold: "border-gold/20 bg-gold/10 text-gold",
-    slate: "border-white/10 bg-white/5 text-slate-300"
-  };
-
-  return (
-    <div className={`rounded-[24px] border p-4 ${toneStyles[tone]}`}>
-      <p className="text-xs uppercase tracking-[0.25em]">{label}</p>
-      <p className="mt-2 text-2xl font-semibold text-white">{value}</p>
-    </div>
-  );
-}
-
 function DataRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-slate-950/30 p-4">
-      <p className="text-xs uppercase tracking-[0.25em] text-slate-500">{label}</p>
-      <p className="mt-2 text-lg font-semibold text-white">{value}</p>
+    <div className="rounded-2xl bg-slate-950/30 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+      <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">{label}</p>
+      <p className="mt-3 text-lg font-semibold text-white">{value}</p>
     </div>
   );
 }
@@ -503,13 +507,39 @@ function MetricPanel({
   helper?: string;
 }) {
   return (
-    <div className="rounded-[24px] border border-white/8 bg-white/5 p-4">
+    <div className="rounded-[24px] bg-white/[0.05] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
       <div className="flex items-center gap-2 text-slate-500">
         <Icon className="h-4 w-4" />
         <p className="text-[10px] uppercase tracking-[0.3em]">{label}</p>
       </div>
       <p className="mt-3 font-mono text-lg font-semibold text-white">{value}</p>
       {helper ? <p className="mt-2 text-xs text-slate-400">{helper}</p> : null}
+    </div>
+  );
+}
+
+function InlineMetric({
+  label,
+  value,
+  helper,
+  tone
+}: {
+  label: string;
+  value: string;
+  helper: string;
+  tone: "cyan" | "gold" | "slate";
+}) {
+  const tones = {
+    cyan: "text-cyan-300",
+    gold: "text-gold",
+    slate: "text-white"
+  };
+
+  return (
+    <div className="rounded-[18px] bg-black/18 px-4 py-3">
+      <p className="text-[10px] uppercase tracking-[0.26em] text-slate-500">{label}</p>
+      <p className={`mt-2 font-mono text-xl font-semibold ${tones[tone]}`}>{value}</p>
+      <p className="mt-1 text-xs text-slate-500">{helper}</p>
     </div>
   );
 }

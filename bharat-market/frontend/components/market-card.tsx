@@ -44,7 +44,7 @@ export function MarketCard({ market }: { market: MarketSummary }) {
   return (
     <motion.div whileHover={{ y: -5 }} transition={{ duration: 0.2 }}>
       <Link href={`/markets/${market.address}`} className="group block">
-        <Panel hover className="h-full p-5">
+        <Panel hover className="h-full p-4">
           <div className="flex items-start justify-between gap-4">
             <div className="flex flex-wrap items-center gap-2">
               <StatusBadge label={market.statusLabel} tone={statusTone} />
@@ -57,23 +57,23 @@ export function MarketCard({ market }: { market: MarketSummary }) {
             </div>
           </div>
 
-          <div className="mt-5 space-y-5">
+          <div className="mt-4 space-y-4">
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-4">
-                <h3 className="min-h-[72px] text-[1.85rem] font-semibold leading-[1.08] tracking-[-0.04em] text-white transition group-hover:text-violet-200">
+                <h3 className="min-h-[60px] text-[1.55rem] font-semibold leading-[1.05] tracking-[-0.04em] text-white transition group-hover:text-violet-200">
                   {market.question}
                 </h3>
                 <ArrowUpRight className="mt-2 h-5 w-5 shrink-0 text-slate-500 transition group-hover:text-violet-300" />
               </div>
               <p className="text-sm leading-6 text-slate-500">{contextLine}</p>
 
-              <div className="rounded-[16px] border border-white/8 bg-white/[0.03] p-4">
-                <div className="flex items-end justify-between">
+              <div className="data-grid-fade rounded-[18px] bg-white/[0.04] p-4">
+                <div className="flex items-end justify-between gap-4">
                   <div>
                     <p className="text-[9px] uppercase tracking-[0.24em] text-slate-500">Implied Probability</p>
                     <div className="mt-2 flex items-end gap-4">
                       <div>
-                        <p className="font-mono text-4xl font-semibold tracking-tight text-mint">
+                        <p className="font-mono text-[2.55rem] font-semibold tracking-tight text-mint">
                           {formatPercent(market.yesProbability)}
                         </p>
                         <p className="mt-1 text-[10px] uppercase tracking-[0.32em] text-slate-500">YES</p>
@@ -86,7 +86,7 @@ export function MarketCard({ market }: { market: MarketSummary }) {
                       </div>
                     </div>
                   </div>
-                  <div className="rounded-[12px] border border-white/8 bg-white/[0.03] px-3 py-2">
+                  <div className="rounded-[12px] bg-black/15 px-3 py-2">
                     <p className="text-[9px] uppercase tracking-[0.24em] text-slate-500">Momentum</p>
                     <p className="mt-1 font-mono text-sm font-semibold text-white">
                       {Math.abs(yesPercent - 50).toFixed(1)}%

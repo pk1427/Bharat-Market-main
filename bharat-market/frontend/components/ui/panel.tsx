@@ -20,7 +20,7 @@ export function Panel({
       whileHover={hover ? { y: -4, scale: 1.003 } : undefined}
       transition={{ duration: 0.22, ease: "easeOut" }}
       className={cn(
-        "panel-surface rounded-[20px] border border-white/8 bg-[linear-gradient(180deg,rgba(25,24,35,0.96),rgba(16,16,24,0.96))] shadow-[0_18px_50px_rgba(0,0,0,0.32)]",
+        "panel-surface rounded-[20px] border border-white/[0.06] bg-[linear-gradient(180deg,rgba(24,23,34,0.94),rgba(13,14,22,0.97))] shadow-[0_22px_55px_rgba(0,0,0,0.34)]",
         glow && "panel-glow",
         className
       )}
