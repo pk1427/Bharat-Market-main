@@ -19,7 +19,10 @@ const SUMMARY_TTL_MS = 120_000;
 
 async function buildMarketBoardSnapshot(marketFactory: `0x${string}`) {
   const publicClient = getServerPublicClient();
-  const markets = await fetchMarketSummaries(publicClient, marketFactory);
+  const markets = await fetchMarketSummaries(publicClient, marketFactory, {
+    includeActivityStats: false,
+    includeCreationMeta: false
+  });
   const payload = markets.map(serializeMarketSummary);
   await setCachedSummaries(payload);
   return payload;
@@ -174,14 +177,16 @@ export async function GET(request: Request) {
       });
     }
 
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to load markets from RPC."
-      },
-      { status: 503 }
-    );
+    return NextResponse.json({
+      markets: [],
+      total: 0,
+      meta: buildApiMeta({
+        source: "rpc",
+        stale: true,
+        warning:
+          "Market index is warming up. BharatMarket is waiting for the indexed backend or RPC fallback to become available.",
+        fallbackUsed: true
+      })
+    });
   }
 }

@@ -87,10 +87,18 @@ type CreationMeta = {
 
 export async function fetchMarketSummaries(
   publicClient: PublicClient,
-  marketFactory: Address
+  marketFactory: Address,
+  options: {
+    includeActivityStats?: boolean;
+    includeCreationMeta?: boolean;
+  } = {}
 ): Promise<MarketSummary[]> {
+  const includeActivityStats = options.includeActivityStats ?? true;
+  const includeCreationMeta = options.includeCreationMeta ?? true;
   const marketAddresses = await fetchMarketAddresses(publicClient, marketFactory);
-  const creationMap = await fetchMarketCreationMap(publicClient, marketFactory);
+  const creationMap = includeCreationMeta
+    ? await fetchMarketCreationMap(publicClient, marketFactory)
+    : new Map<string, CreationMeta>();
 
   const summaries = await Promise.all(
     marketAddresses.map(async (marketAddress) => {
@@ -152,8 +160,8 @@ export async function fetchMarketSummaries(
           abi: marketAbi,
           functionName: "winningOutcome"
         }),
-        fetchMarketVolume(publicClient, marketAddress),
-        fetchMarketTraderCount(publicClient, marketAddress)
+        includeActivityStats ? fetchMarketVolume(publicClient, marketAddress) : 0n,
+        includeActivityStats ? fetchMarketTraderCount(publicClient, marketAddress) : 0
       ]);
 
       const created = creationMap.get(marketAddress.toLowerCase());
