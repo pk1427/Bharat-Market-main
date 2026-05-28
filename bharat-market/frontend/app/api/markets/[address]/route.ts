@@ -45,7 +45,18 @@ async function buildMarketDetailSnapshot(
       })
     : null;
 
-  const payload = serializeMarketDetail(detail);
+  const indexed = await getIndexedMarketDetail(marketAddress).catch(() => null);
+  const payload = {
+    ...serializeMarketDetail(detail),
+    ...(indexed?.market
+      ? {
+          creator: indexed.market.creator,
+          question: indexed.market.question,
+          volume: indexed.market.volume,
+          traderCount: indexed.market.traderCount
+        }
+      : {})
+  };
   const normalizedPendingRequest = typeof pendingRequest === "string" ? pendingRequest : null;
 
   await setCachedDetail(
