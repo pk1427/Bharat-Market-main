@@ -6,8 +6,7 @@ import { getAddress } from "viem";
 
 import { getIndexedPortfolio } from "@/backend/services/portfolio";
 import { getRequiredAddresses } from "@/lib/contracts";
-import { fetchLiquidityCostBasis } from "@/lib/event-indexer";
-import { fetchAverageEntryBySide, fetchMarketDetail, fetchMarketSummaries } from "@/lib/market-data";
+import { fetchMarketDetail, fetchMarketSummaries } from "@/lib/market-data";
 import {
   getCachedPortfolio,
   getCachedSummaries,
@@ -81,7 +80,10 @@ async function buildPortfolioPayload(account: `0x${string}`, addresses: NonNulla
         volume: BigInt(summary.volume),
         endTime: BigInt(summary.endTime)
       }))
-      : await fetchMarketSummaries(publicClient, addresses.marketFactory);
+      : await fetchMarketSummaries(publicClient, addresses.marketFactory, {
+          includeActivityStats: false,
+          includeCreationMeta: false
+        });
   const groups: PortfolioGroup[] = [];
   const overview: PortfolioOverview = {
     walletUsdcBalance: 0n,
@@ -105,10 +107,6 @@ async function buildPortfolioPayload(account: `0x${string}`, addresses: NonNulla
         includeActivityStats: false
       }
     );
-    const avgEntries = await fetchAverageEntryBySide(publicClient, summary.address, account).catch(() => ({
-      yes: null,
-      no: null
-    }));
     const question = summary.question || detail.question;
     overview.walletUsdcBalance = detail.usdcBalance;
 
@@ -116,7 +114,6 @@ async function buildPortfolioPayload(account: `0x${string}`, addresses: NonNulla
 
     const yesValue = (detail.yesBalance * detail.yesProbability) / 1_000_000_000_000_000_000n;
     if (detail.yesBalance > 0n) {
-      const costBasis = avgEntries.yes ? (avgEntries.yes * detail.yesBalance) / 1_000_000n : 0n;
       positions.push({
         marketAddress: detail.address,
         question,
@@ -124,10 +121,10 @@ async function buildPortfolioPayload(account: `0x${string}`, addresses: NonNulla
         statusLabel: detail.statusLabel,
         side: "yes",
         shares: detail.yesBalance,
-        averageEntryPrice: avgEntries.yes,
+        averageEntryPrice: null,
         currentProbability: detail.yesProbability,
         estimatedValue: yesValue,
-        unrealizedPnl: yesValue - costBasis,
+        unrealizedPnl: yesValue,
         redeemable:
           detail.resolved && detail.winningOutcome === 1 ? detail.yesBalance : 0n,
         oracleType: detail.oracleType,
@@ -137,7 +134,6 @@ async function buildPortfolioPayload(account: `0x${string}`, addresses: NonNulla
 
     const noValue = (detail.noBalance * detail.noProbability) / 1_000_000_000_000_000_000n;
     if (detail.noBalance > 0n) {
-      const costBasis = avgEntries.no ? (avgEntries.no * detail.noBalance) / 1_000_000n : 0n;
       positions.push({
         marketAddress: detail.address,
         question,
@@ -145,10 +141,10 @@ async function buildPortfolioPayload(account: `0x${string}`, addresses: NonNulla
         statusLabel: detail.statusLabel,
         side: "no",
         shares: detail.noBalance,
-        averageEntryPrice: avgEntries.no,
+        averageEntryPrice: null,
         currentProbability: detail.noProbability,
         estimatedValue: noValue,
-        unrealizedPnl: noValue - costBasis,
+        unrealizedPnl: noValue,
         redeemable:
           detail.resolved && detail.winningOutcome === 2 ? detail.noBalance : 0n,
         oracleType: detail.oracleType,
@@ -157,10 +153,7 @@ async function buildPortfolioPayload(account: `0x${string}`, addresses: NonNulla
     }
 
     if (detail.lpBalance > 0n) {
-      const lpCostBasis = await fetchLiquidityCostBasis(publicClient, detail.address, account).catch(() => ({
-        netCostBasis: 0n
-      }));
-      const currentValue = lpCostBasis.netCostBasis > 0n ? lpCostBasis.netCostBasis : detail.lpBalance;
+      const currentValue = detail.lpBalance;
       positions.push({
         marketAddress: detail.address,
         question,
@@ -171,7 +164,7 @@ async function buildPortfolioPayload(account: `0x${string}`, addresses: NonNulla
         averageEntryPrice: null,
         currentProbability: 500000000000000000n,
         estimatedValue: currentValue,
-        unrealizedPnl: currentValue - lpCostBasis.netCostBasis,
+        unrealizedPnl: currentValue,
         redeemable: 0n,
         liquidityValue: currentValue,
         oracleType: detail.oracleType,
