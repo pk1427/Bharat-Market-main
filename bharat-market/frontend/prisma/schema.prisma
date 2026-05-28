@@ -1,0 +1,224 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MarketOutcome {
+  PENDING
+  YES
+  NO
+}
+
+enum TradeSide {
+  YES
+  NO
+}
+
+enum LiquidityEventType {
+  ADD
+  REMOVE
+}
+
+enum OracleEventType {
+  REQUESTED
+  FULFILLED
+  FAILED
+}
+
+enum PositionSide {
+  YES
+  NO
+}
+
+model Market {
+  id                  String                  @id @default(cuid())
+  marketAddress       String                  @unique
+  question            String
+  oracleType          String
+  oracleQuery         String
+  creator             String?
+  createdAt           DateTime
+  createdBlock        BigInt
+  createdTxHash       String?
+  endTime             DateTime
+  resolved            Boolean                 @default(false)
+  outcome             MarketOutcome           @default(PENDING)
+  totalVolume         BigInt                  @default(0)
+  totalLiquidity      BigInt                  @default(0)
+  yesPool             BigInt                  @default(0)
+  noPool              BigInt                  @default(0)
+  latestYesProbability BigInt                 @default(500000000000000000)
+  latestNoProbability BigInt                  @default(500000000000000000)
+  traderCount         Int                     @default(0)
+  lastActivityAt      DateTime?
+  yesToken            String?
+  noToken             String?
+  lpToken             String?
+  trades              Trade[]
+  liquidityEvents     LiquidityEvent[]
+  redemptions         Redemption[]
+  snapshots           MarketSnapshot[]
+  portfolioPositions  WalletPosition[]
+  liquidityPositions  WalletLiquidityPosition[]
+  participants        MarketParticipant[]
+  oracleEvents        OracleEvent[]
+
+  @@index([resolved, endTime])
+  @@index([lastActivityAt])
+}
+
+model Trade {
+  id               String    @id @default(cuid())
+  eventKey         String    @unique
+  marketId         String
+  market           Market    @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  trader           String
+  side             TradeSide
+  collateralAmount BigInt
+  sharesReceived   BigInt
+  probability      BigInt
+  txHash           String
+  blockNumber      BigInt
+  logIndex         Int
+  timestamp        DateTime
+
+  @@index([marketId, timestamp(sort: Desc)])
+  @@index([trader, timestamp(sort: Desc)])
+  @@index([txHash, logIndex])
+}
+
+model LiquidityEvent {
+  id               String             @id @default(cuid())
+  eventKey         String             @unique
+  marketId         String
+  market           Market             @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  provider         String
+  type             LiquidityEventType
+  collateralAmount BigInt
+  lpTokens         BigInt
+  txHash           String
+  blockNumber      BigInt
+  logIndex         Int
+  timestamp        DateTime
+
+  @@index([marketId, timestamp(sort: Desc)])
+  @@index([provider, timestamp(sort: Desc)])
+}
+
+model Redemption {
+  id           String   @id @default(cuid())
+  eventKey     String   @unique
+  marketId      String
+  market       Market   @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  redeemer     String
+  payoutAmount BigInt
+  txHash       String
+  blockNumber  BigInt
+  logIndex     Int
+  timestamp    DateTime
+
+  @@index([marketId, timestamp(sort: Desc)])
+  @@index([redeemer, timestamp(sort: Desc)])
+}
+
+model MarketSnapshot {
+  id             String   @id @default(cuid())
+  eventKey       String   @unique
+  marketId       String
+  market         Market   @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  timestamp      DateTime
+  blockNumber    BigInt
+  txHash         String
+  logIndex       Int
+  yesProbability BigInt
+  noProbability  BigInt
+  yesPool        BigInt
+  noPool         BigInt
+  liquidity      BigInt
+  volume         BigInt
+
+  @@index([marketId, timestamp(sort: Desc)])
+  @@index([marketId, blockNumber, logIndex])
+}
+
+model PortfolioSnapshot {
+  id            String   @id @default(cuid())
+  wallet        String
+  timestamp     DateTime
+  totalValue    BigInt
+  unrealizedPnl BigInt
+  realizedPnl   BigInt
+
+  @@index([wallet, timestamp(sort: Desc)])
+}
+
+model WalletPosition {
+  id               String       @id @default(cuid())
+  wallet           String
+  marketId         String
+  market           Market       @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  side             PositionSide
+  shares           BigInt       @default(0)
+  collateralIn     BigInt       @default(0)
+  averageEntryPrice BigInt?
+  redeemedAmount   BigInt       @default(0)
+  lastTradeAt      DateTime?
+  updatedAt        DateTime     @updatedAt
+
+  @@unique([wallet, marketId, side])
+  @@index([wallet, updatedAt(sort: Desc)])
+}
+
+model WalletLiquidityPosition {
+  id              String   @id @default(cuid())
+  wallet          String
+  marketId        String
+  market          Market   @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  lpTokens        BigInt   @default(0)
+  netCollateral   BigInt   @default(0)
+  lastActivityAt  DateTime?
+  updatedAt       DateTime @updatedAt
+
+  @@unique([wallet, marketId])
+  @@index([wallet, updatedAt(sort: Desc)])
+}
+
+model MarketParticipant {
+  id         String   @id @default(cuid())
+  marketId    String
+  market      Market   @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  wallet     String
+  firstTradeAt DateTime
+
+  @@unique([marketId, wallet])
+}
+
+model OracleEvent {
+  id          String          @id @default(cuid())
+  eventKey    String          @unique
+  marketId     String
+  market      Market          @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  requestId   String?
+  type        OracleEventType
+  oracleType  String?
+  oracleQuery String?
+  outcome     Int?
+  errorData   String?
+  txHash      String
+  blockNumber BigInt
+  logIndex    Int
+  timestamp   DateTime
+
+  @@index([marketId, timestamp(sort: Desc)])
+  @@index([requestId])
+}
+
+model IndexerCursor {
+  name             String   @id
+  lastIndexedBlock BigInt
+  updatedAt        DateTime @updatedAt
+}

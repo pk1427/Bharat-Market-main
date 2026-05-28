@@ -28,11 +28,16 @@ export function ActivityFeed({ marketAddress }: { marketAddress: string }) {
   const activity = useActivityFeed(marketAddress);
   const [filter, setFilter] = useState<ActivityFilter>("all");
   const [whalesOnly, setWhalesOnly] = useState(false);
+  const items = useMemo(
+    () => activity.data?.pages.flatMap((page) => page.items) ?? [],
+    [activity.data?.pages]
+  );
+  const warning = activity.data?.pages[0]?.meta?.warning ?? null;
+  const hasMore = Boolean(activity.hasNextPage);
 
   const filteredItems = useMemo(() => {
-    const items = activity.data?.items ?? [];
     return items.filter((item) => filterMatchers[filter](item)).filter((item) => (whalesOnly ? item.whale : true));
-  }, [activity.data?.items, filter, whalesOnly]);
+  }, [filter, items, whalesOnly]);
 
   if (activity.isLoading) {
     return (
@@ -50,13 +55,13 @@ export function ActivityFeed({ marketAddress }: { marketAddress: string }) {
     return <ErrorState message={activity.error.message} />;
   }
 
-  if (!activity.data || activity.data.items.length === 0) {
+  if (!activity.data || items.length === 0) {
     return (
       <Panel className="p-5">
         <EmptyState
           title="No Activity Yet"
           description={
-            activity.data?.warning
+            warning
               ? "Activity is temporarily unavailable from RPC, but trading and settlement data are still usable."
               : "As traders, LPs, and the oracle interact with this market, their actions will appear here."
           }
@@ -111,9 +116,9 @@ export function ActivityFeed({ marketAddress }: { marketAddress: string }) {
       </div>
 
       <div className="space-y-3 px-5 py-5">
-        {activity.data.warning ? (
+        {warning ? (
           <div className="rounded-2xl border border-gold/20 bg-gold/10 px-4 py-3 text-sm text-gold">
-            Activity is temporarily using a degraded data path because Amoy RPC limited recent event lookups.
+            Activity is temporarily using a degraded data path because indexed history is incomplete or Amoy RPC is limiting fallbacks.
           </div>
         ) : null}
         {filteredItems.length === 0 ? (
@@ -161,6 +166,16 @@ export function ActivityFeed({ marketAddress }: { marketAddress: string }) {
             </div>
           </div>
         ))}
+        {hasMore ? (
+          <button
+            type="button"
+            onClick={() => void activity.fetchNextPage()}
+            disabled={activity.isFetchingNextPage}
+            className="w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-medium text-slate-200 transition hover:border-white/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {activity.isFetchingNextPage ? "Loading more..." : "Load more activity"}
+          </button>
+        ) : null}
       </div>
     </Panel>
   );

@@ -3,6 +3,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useAccount } from "wagmi";
 
+import { fetchApi } from "@/services/api-client";
+import type { ApiMeta } from "@/types/product";
 import type { PortfolioGroup, PortfolioOverview, PortfolioPosition } from "@/types/product";
 
 type PortfolioPayload = {
@@ -42,14 +44,14 @@ type PortfolioPayload = {
     }>;
   }>;
   updatedAt: string;
-  warning?: string | null;
+  meta?: ApiMeta;
 };
 
 function deserializePortfolio(payload: PortfolioPayload): {
   overview: PortfolioOverview;
   groups: PortfolioGroup[];
   updatedAt: string;
-  warning?: string | null;
+  meta?: ApiMeta | null;
 } {
   return {
     overview: {
@@ -77,7 +79,7 @@ function deserializePortfolio(payload: PortfolioPayload): {
       }))
     })),
     updatedAt: payload.updatedAt,
-    warning: payload.warning
+    meta: payload.meta ?? null
   };
 }
 
@@ -89,18 +91,13 @@ export function usePortfolio() {
     queryKey: ["portfolio", address],
     enabled,
     queryFn: async () => {
-      const response = await fetch(`/api/portfolio?account=${address}`, {
-        cache: "no-store"
-      });
-      const payload = (await response.json()) as PortfolioPayload & { error?: string };
-
-      if (!response.ok) {
-        throw new Error(payload.error ?? "Failed to load portfolio.");
-      }
+      const payload = await fetchApi<PortfolioPayload>(`/api/portfolio?account=${address}`);
 
       return deserializePortfolio(payload);
     },
-    refetchInterval: 45_000
+    staleTime: 30_000,
+    refetchInterval: 90_000,
+    refetchOnWindowFocus: false
   });
 
   return {

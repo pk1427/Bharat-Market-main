@@ -1,6 +1,9 @@
+import { buildApiMeta } from "@/backend/api/response";
 import { NextRequest, NextResponse } from "next/server";
 import { getAddress } from "viem";
 
+import { getMarketIndexerFreshness } from "@/backend/services/indexer-freshness";
+import { getIndexedMarketDetail } from "@/backend/services/markets";
 import { chainlinkFunctionsOracleAbi } from "@/lib/abis";
 import { getRequiredAddresses } from "@/lib/contracts";
 import {
@@ -27,7 +30,10 @@ async function buildMarketDetailSnapshot(
     addresses.marketFactory,
     marketAddress,
     addresses.usdc,
-    account
+    account,
+    {
+      includeActivityStats: false
+    }
   );
 
   const pendingRequest = addresses.chainlinkOracle
@@ -73,8 +79,24 @@ export async function GET(
   const accountParam = request.nextUrl.searchParams.get("account");
   const account = accountParam ? getAddress(accountParam) : undefined;
   const forceFresh = request.nextUrl.searchParams.get("fresh") === "1";
+  const freshness = forceFresh ? null : await getMarketIndexerFreshness(marketAddress);
 
   try {
+    if (!forceFresh && freshness?.fresh) {
+      const indexed = await getIndexedMarketDetail(marketAddress, account);
+      if (indexed) {
+        return NextResponse.json({
+          market: indexed.market,
+          pendingRequest: indexed.pendingRequest,
+          meta: buildApiMeta({
+            source: "indexed",
+            indexed: true,
+            updatedAt: freshness.updatedAt ?? undefined
+          })
+        });
+      }
+    }
+
     const cached = await getCachedDetail(marketAddress, account);
     if (!forceFresh && cached) {
       if (!isFresh(cached.updatedAt, DETAIL_TTL_MS)) {
@@ -86,9 +108,13 @@ export async function GET(
       return NextResponse.json({
         market: cached.data,
         pendingRequest: cached.pendingRequest,
-        stale: !isFresh(cached.updatedAt, DETAIL_TTL_MS),
-        updatedAt: cached.updatedAt,
-        cached: true
+        meta: buildApiMeta({
+          source: "cache",
+          stale: !isFresh(cached.updatedAt, DETAIL_TTL_MS),
+          updatedAt: cached.updatedAt,
+          fallbackUsed: true,
+          warning: freshness && !freshness.fresh ? freshness.reason : null
+        })
       });
     }
 
@@ -97,8 +123,10 @@ export async function GET(
     return NextResponse.json({
       market: snapshot.market,
       pendingRequest: snapshot.pendingRequest,
-      stale: false,
-      updatedAt: new Date().toISOString()
+      meta: buildApiMeta({
+        source: "rpc",
+        warning: freshness && !freshness.fresh ? freshness.reason : null
+      })
     });
   } catch (error) {
     const cached = await getCachedDetail(marketAddress, account);
@@ -107,12 +135,18 @@ export async function GET(
       return NextResponse.json({
         market: cached.data,
         pendingRequest: cached.pendingRequest,
-        stale: true,
-        updatedAt: cached.updatedAt,
-        warning:
-          error instanceof Error
-            ? error.message
-            : "RPC unavailable. Showing cached market detail."
+        meta: buildApiMeta({
+          source: "cache",
+          stale: true,
+          updatedAt: cached.updatedAt,
+          warning:
+            freshness && !freshness.fresh
+              ? freshness.reason
+              : error instanceof Error
+              ? error.message
+              : "RPC unavailable. Showing cached market detail.",
+          fallbackUsed: true
+        })
       });
     }
 

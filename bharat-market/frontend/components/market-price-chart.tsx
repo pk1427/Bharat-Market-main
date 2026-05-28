@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   Area,
   AreaChart,
@@ -20,22 +20,19 @@ type Range = "1H" | "24H" | "ALL";
 
 export function MarketPriceChart({
   history,
+  range,
+  onRangeChange,
   loading = false,
   warning = null
 }: {
   history: HistoryPoint[];
+  range: Range;
+  onRangeChange: (range: Range) => void;
   loading?: boolean;
   warning?: string | null;
 }) {
-  const [range, setRange] = useState<Range>("ALL");
-
   const filtered = useMemo(() => {
-    const now = Date.now();
-    const cutoff =
-      range === "1H" ? now - 60 * 60 * 1000 : range === "24H" ? now - 24 * 60 * 60 * 1000 : 0;
-    const points = history.filter((point) => point.timestamp >= cutoff);
-
-    return points.map((point) => ({
+    return history.map((point) => ({
       ...point,
       yes: formatProbabilityNumber(point.yesProbability),
       no: formatProbabilityNumber(point.noProbability),
@@ -45,7 +42,7 @@ export function MarketPriceChart({
         minute: "2-digit"
       })
     }));
-  }, [history, range]);
+  }, [history]);
 
   if (loading) {
     return (
@@ -88,7 +85,7 @@ export function MarketPriceChart({
             <button
               key={item}
               type="button"
-              onClick={() => setRange(item)}
+              onClick={() => onRangeChange(item)}
                   className={`rounded-full px-3 py-2 text-xs uppercase tracking-[0.25em] transition ${
                 range === item
                     ? "bg-gold/15 text-gold"

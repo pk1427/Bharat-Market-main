@@ -26,6 +26,8 @@ import { MetricCard } from "@/components/ui/metric-card";
 import { Panel } from "@/components/ui/panel";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { useIndexerStatus } from "@/hooks/use-indexer-status";
+import { useLivePortfolioStream } from "@/hooks/use-live-stream";
 import { usePortfolio } from "@/hooks/use-portfolio";
 import {
   formatPercent,
@@ -51,6 +53,8 @@ const sideLabel: Record<PositionSide, string> = {
 export function PortfolioDashboard() {
   const portfolio = usePortfolio();
   const { address } = useAccount();
+  const indexerStatus = useIndexerStatus();
+  const portfolioStream = useLivePortfolioStream(address ?? null);
 
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "awaiting" | "resolved">("all");
   const [sideFilter, setSideFilter] = useState<"all" | PositionSide>("all");
@@ -171,12 +175,37 @@ export function PortfolioDashboard() {
   return (
     <div className="space-y-6">
       <Panel className="overflow-hidden p-0">
+        {portfolio.data.meta?.warning ? (
+          <div className="border-b border-gold/15 bg-gold/10 px-6 py-4 text-sm text-gold sm:px-8">
+            {portfolio.data.meta.warning}
+          </div>
+        ) : null}
         <div className="grid xl:grid-cols-[minmax(0,1.25fr)_430px]">
           <div className="space-y-7 px-6 py-7 sm:px-8 sm:py-8">
             <div className="flex flex-wrap items-center gap-3">
               <StatusBadge
-                label={portfolio.data.warning ? "Cached Sync" : "Live Sync"}
-                tone={portfolio.data.warning ? "gold" : "mint"}
+                label={portfolio.data.meta?.source === "indexed" ? "Indexed Sync" : portfolio.data.meta?.source === "cache" ? "Cached Sync" : "Live Sync"}
+                tone={portfolio.data.meta?.warning ? "gold" : "mint"}
+              />
+              <StatusBadge
+                label={portfolioStream.status === "live" ? "Stream Live" : portfolioStream.status === "fallback" ? "Fallback" : "Reconnecting"}
+                tone={portfolioStream.status === "live" ? "mint" : portfolioStream.status === "fallback" ? "gold" : "slate"}
+              />
+              <StatusBadge
+                label={
+                  indexerStatus.data?.freshness.fresh
+                    ? "Indexer Fresh"
+                    : indexerStatus.data?.freshness.state === "stale"
+                      ? "Indexer Stale"
+                      : "Indexer Warming"
+                }
+                tone={
+                  indexerStatus.data?.freshness.fresh
+                    ? "mint"
+                    : indexerStatus.data?.freshness.state === "stale"
+                      ? "gold"
+                      : "slate"
+                }
               />
               <StatusBadge
                 label={`${insightMetrics.activeMarkets} live • ${insightMetrics.awaitingMarkets} awaiting`}

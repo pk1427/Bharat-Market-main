@@ -5,9 +5,16 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate dev",
+    "indexer:markets": "tsx backend/workers/index-markets.ts",
+    "indexer:market": "tsx backend/workers/index-market.ts",
+    "indexer:loop": "tsx backend/workers/index-loop.ts"
   },
   "dependencies": {
+    "@prisma/client": "^6.9.0",
     "@metamask/rpc-errors": "^7.0.3",
     "@noble/hashes": "^1.8.0",
     "@rainbow-me/rainbowkit": "^2.1.4",
@@ -31,7 +38,9 @@
     "@types/react-dom": "^18.3.1",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",
+    "prisma": "^6.9.0",
     "tailwindcss": "^3.4.14",
+    "tsx": "^4.20.3",
     "typescript": "^5.6.3"
   }
 }

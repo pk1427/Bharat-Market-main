@@ -1,6 +1,10 @@
+import { buildApiMeta } from "@/backend/api/response";
+import { getPortfolioIndexerFreshness } from "@/backend/services/indexer-freshness";
+import { getIndexedMarketBoardPage } from "@/backend/services/markets";
 import { NextRequest, NextResponse } from "next/server";
 import { getAddress } from "viem";
 
+import { getIndexedPortfolio } from "@/backend/services/portfolio";
 import { getRequiredAddresses } from "@/lib/contracts";
 import { fetchLiquidityCostBasis } from "@/lib/event-indexer";
 import { fetchAverageEntryBySide, fetchMarketDetail, fetchMarketSummaries } from "@/lib/market-data";
@@ -12,7 +16,6 @@ import {
 } from "@/lib/server/market-cache";
 import { getServerPublicClient } from "@/lib/server/public-client";
 import type { PortfolioGroup, PortfolioOverview, PortfolioPosition, PositionSide } from "@/types/product";
-import { outcomeTokenAbi } from "@/lib/abis";
 
 const PORTFOLIO_TTL_MS = 120_000;
 const SUMMARY_TTL_MS = 120_000;
@@ -58,9 +61,10 @@ function parseAccount(request: NextRequest) {
 
 async function buildPortfolioPayload(account: `0x${string}`, addresses: NonNullable<ReturnType<typeof getRequiredAddresses>>) {
   const publicClient = getServerPublicClient();
+  const indexedBoard = await getIndexedMarketBoardPage({ take: 100, skip: 0 }).catch(() => null);
   const cachedSummaries = await getCachedSummaries();
-  const summaries = cachedSummaries && isFresh(cachedSummaries.updatedAt, SUMMARY_TTL_MS)
-    ? cachedSummaries.data.map((summary) => ({
+  const summaries = indexedBoard?.markets.length
+    ? indexedBoard.markets.map((summary) => ({
         ...summary,
         yesProbability: BigInt(summary.yesProbability),
         noProbability: BigInt(summary.noProbability),
@@ -68,7 +72,16 @@ async function buildPortfolioPayload(account: `0x${string}`, addresses: NonNulla
         volume: BigInt(summary.volume),
         endTime: BigInt(summary.endTime)
       }))
-    : await fetchMarketSummaries(publicClient, addresses.marketFactory);
+    : cachedSummaries && isFresh(cachedSummaries.updatedAt, SUMMARY_TTL_MS)
+      ? cachedSummaries.data.map((summary) => ({
+        ...summary,
+        yesProbability: BigInt(summary.yesProbability),
+        noProbability: BigInt(summary.noProbability),
+        liquidity: BigInt(summary.liquidity),
+        volume: BigInt(summary.volume),
+        endTime: BigInt(summary.endTime)
+      }))
+      : await fetchMarketSummaries(publicClient, addresses.marketFactory);
   const groups: PortfolioGroup[] = [];
   const overview: PortfolioOverview = {
     walletUsdcBalance: 0n,
@@ -87,15 +100,16 @@ async function buildPortfolioPayload(account: `0x${string}`, addresses: NonNulla
       addresses.marketFactory,
       summary.address,
       addresses.usdc,
-      account
+      account,
+      {
+        includeActivityStats: false
+      }
     );
-    const avgEntries = await fetchAverageEntryBySide(publicClient, summary.address, account);
-    const lpTotalSupply = await publicClient.readContract({
-      address: detail.lpToken,
-      abi: outcomeTokenAbi,
-      functionName: "totalSupply"
-    });
-
+    const avgEntries = await fetchAverageEntryBySide(publicClient, summary.address, account).catch(() => ({
+      yes: null,
+      no: null
+    }));
+    const question = summary.question || detail.question;
     overview.walletUsdcBalance = detail.usdcBalance;
 
     const positions: PortfolioPosition[] = [];
@@ -105,7 +119,7 @@ async function buildPortfolioPayload(account: `0x${string}`, addresses: NonNulla
       const costBasis = avgEntries.yes ? (avgEntries.yes * detail.yesBalance) / 1_000_000n : 0n;
       positions.push({
         marketAddress: detail.address,
-        question: detail.question,
+        question,
         status: detail.status,
         statusLabel: detail.statusLabel,
         side: "yes",
@@ -126,7 +140,7 @@ async function buildPortfolioPayload(account: `0x${string}`, addresses: NonNulla
       const costBasis = avgEntries.no ? (avgEntries.no * detail.noBalance) / 1_000_000n : 0n;
       positions.push({
         marketAddress: detail.address,
-        question: detail.question,
+        question,
         status: detail.status,
         statusLabel: detail.statusLabel,
         side: "no",
@@ -143,12 +157,13 @@ async function buildPortfolioPayload(account: `0x${string}`, addresses: NonNulla
     }
 
     if (detail.lpBalance > 0n) {
-      const currentValue =
-        lpTotalSupply > 0n ? ((detail.yesPool + detail.noPool) * detail.lpBalance) / lpTotalSupply : 0n;
-      const lpCostBasis = await fetchLiquidityCostBasis(publicClient, detail.address, account);
+      const lpCostBasis = await fetchLiquidityCostBasis(publicClient, detail.address, account).catch(() => ({
+        netCostBasis: 0n
+      }));
+      const currentValue = lpCostBasis.netCostBasis > 0n ? lpCostBasis.netCostBasis : detail.lpBalance;
       positions.push({
         marketAddress: detail.address,
-        question: detail.question,
+        question,
         status: detail.status,
         statusLabel: detail.statusLabel,
         side: "lp",
@@ -171,7 +186,7 @@ async function buildPortfolioPayload(account: `0x${string}`, addresses: NonNulla
     const redeemableTotal = positions.reduce((total, position) => total + position.redeemable, 0n);
     groups.push({
       marketAddress: detail.address,
-      question: detail.question,
+      question,
       status: detail.status,
       statusLabel: detail.statusLabel,
       category: detail.category,
@@ -224,39 +239,65 @@ export async function GET(request: NextRequest) {
 
   try {
     const forceFresh = request.nextUrl.searchParams.get("fresh") === "1";
-    const cachedPortfolio = await getCachedPortfolio(account);
-    if (!forceFresh && cachedPortfolio) {
-      if (!isFresh(cachedPortfolio.updatedAt, PORTFOLIO_TTL_MS)) {
-        void buildPortfolioPayload(account, addresses)
-          .then((payload) => setCachedPortfolio(account, payload))
-          .catch(() => {
-            // Preserve the last good backend portfolio snapshot if refresh fails.
-          });
-      }
+    const freshness = forceFresh ? null : await getPortfolioIndexerFreshness();
 
+    if (!forceFresh && freshness?.fresh) {
+      const indexedPortfolio = await getIndexedPortfolio(account);
+      if (indexedPortfolio) {
+        return NextResponse.json({
+          ...indexedPortfolio,
+          meta: buildApiMeta({
+            source: "indexed",
+            indexed: true,
+            updatedAt: freshness.updatedAt ?? indexedPortfolio.updatedAt
+          })
+        });
+      }
+    }
+
+    const cachedPortfolio = await getCachedPortfolio(account);
+    if (!forceFresh && cachedPortfolio && freshness?.fresh) {
       return NextResponse.json({
         ...(cachedPortfolio.data as Record<string, unknown>),
-        updatedAt: cachedPortfolio.updatedAt,
-        stale: !isFresh(cachedPortfolio.updatedAt, PORTFOLIO_TTL_MS),
-        cached: true
+        meta: buildApiMeta({
+          source: "cache",
+          stale: !isFresh(cachedPortfolio.updatedAt, PORTFOLIO_TTL_MS),
+          updatedAt: cachedPortfolio.updatedAt,
+          fallbackUsed: true,
+          warning: null
+        })
       });
     }
 
     const payload = await buildPortfolioPayload(account, addresses);
     await setCachedPortfolio(account, payload);
 
-    return NextResponse.json(payload);
+    return NextResponse.json({
+      ...payload,
+      meta: buildApiMeta({
+        source: "rpc",
+        updatedAt: payload.updatedAt,
+        warning: freshness && !freshness.fresh ? freshness.reason : null
+      })
+    });
   } catch (error) {
+    const freshness = request.nextUrl.searchParams.get("fresh") === "1" ? null : await getPortfolioIndexerFreshness();
     const cachedPortfolio = await getCachedPortfolio(account);
     if (cachedPortfolio) {
       return NextResponse.json({
         ...(cachedPortfolio.data as Record<string, unknown>),
-        updatedAt: cachedPortfolio.updatedAt,
-        stale: true,
-        warning:
-          error instanceof Error
-            ? error.message
-            : "RPC unavailable. Showing cached portfolio."
+        meta: buildApiMeta({
+          source: "cache",
+          stale: true,
+          updatedAt: cachedPortfolio.updatedAt,
+          warning:
+            freshness && !freshness.fresh
+              ? freshness.reason
+              : error instanceof Error
+              ? error.message
+              : "RPC unavailable. Showing cached portfolio.",
+          fallbackUsed: true
+        })
       });
     }
 

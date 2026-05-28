@@ -3,11 +3,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { useAccount } from "wagmi";
 
+import { fetchApi } from "@/services/api-client";
+
 type WalletSummaryPayload = {
   creationFee?: string;
   usdcBalance?: string;
   creationAllowance?: string;
-  error?: string;
 };
 
 export function useWalletSummary() {
@@ -18,21 +19,15 @@ export function useWalletSummary() {
     queryKey: ["wallet-summary", address],
     enabled,
     queryFn: async () => {
-      const response = await fetch(`/api/wallet?account=${address}`, {
-        cache: "no-store"
-      });
-      const payload = (await response.json()) as WalletSummaryPayload;
-
-      if (!response.ok) {
-        throw new Error(payload.error ?? "Failed to load wallet summary.");
-      }
+      const payload = await fetchApi<WalletSummaryPayload>(`/api/wallet?account=${address}`);
 
       return {
         usdcBalance: BigInt(payload.usdcBalance ?? "0")
       };
     },
     staleTime: 30_000,
-    refetchInterval: 45_000
+    refetchInterval: 90_000,
+    refetchOnWindowFocus: false
   });
 
   return {

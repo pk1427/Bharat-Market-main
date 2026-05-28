@@ -51,6 +51,20 @@ export type PortfolioResponse = {
   warning?: string | null;
 };
 
+export type ApiDataSource = "indexed" | "cache" | "rpc";
+
+export type ApiMeta = {
+  source: ApiDataSource;
+  stale: boolean;
+  updatedAt: string;
+  warning?: string | null;
+  indexed?: boolean;
+  fallbackUsed?: boolean;
+  cursor?: string | null;
+  hasMore?: boolean;
+  range?: "1H" | "24H" | "ALL";
+};
+
 export type ActivityType =
   | "buy_yes"
   | "buy_no"

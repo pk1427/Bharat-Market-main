@@ -1,6 +1,8 @@
+import { buildApiMeta } from "@/backend/api/response";
 import { NextRequest, NextResponse } from "next/server";
 import { getAddress } from "viem";
 
+import { getIndexedMarketHistory } from "@/backend/services/history";
 import { getRequiredAddresses } from "@/lib/contracts";
 import { fetchMarketHistoryFromEvents } from "@/lib/event-indexer";
 import {
@@ -30,7 +32,7 @@ async function buildMarketHistorySnapshot(
 }
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   context: { params: Promise<{ address: string }> }
 ) {
   const addresses = getRequiredAddresses();
@@ -42,7 +44,24 @@ export async function GET(
   try {
     const { address } = await context.params;
     const marketAddress = getAddress(address);
-    const forceFresh = _request.nextUrl.searchParams.get("fresh") === "1";
+    const forceFresh = request.nextUrl.searchParams.get("fresh") === "1";
+    const range = (request.nextUrl.searchParams.get("range") ?? "ALL") as "1H" | "24H" | "ALL";
+    if (!forceFresh) {
+      const indexedHistory = await getIndexedMarketHistory(marketAddress, {
+        range
+      });
+      if (indexedHistory && indexedHistory.length > 0) {
+        return NextResponse.json({
+          points: indexedHistory,
+          meta: buildApiMeta({
+            source: "indexed",
+            indexed: true,
+            range
+          })
+        });
+      }
+    }
+
     const cached = await getCachedHistory(marketAddress);
     if (!forceFresh && cached) {
       if (!isFresh(cached.updatedAt, HISTORY_TTL_MS)) {
@@ -53,16 +72,24 @@ export async function GET(
 
       return NextResponse.json({
         points: cached.data,
-        stale: !isFresh(cached.updatedAt, HISTORY_TTL_MS),
-        updatedAt: cached.updatedAt,
-        cached: true
+        meta: buildApiMeta({
+          source: "cache",
+          stale: !isFresh(cached.updatedAt, HISTORY_TTL_MS),
+          updatedAt: cached.updatedAt,
+          fallbackUsed: true,
+          range
+        })
       });
     }
 
     const payload = await buildMarketHistorySnapshot(addresses.marketFactory, marketAddress);
 
     return NextResponse.json({
-      points: payload
+      points: payload,
+      meta: buildApiMeta({
+        source: "rpc",
+        range
+      })
     });
   } catch (error) {
     const { address } = await context.params;
@@ -71,21 +98,29 @@ export async function GET(
     if (cached) {
       return NextResponse.json({
         points: cached.data,
-        stale: true,
-        updatedAt: cached.updatedAt,
-        warning:
-          error instanceof Error
-            ? error.message
-            : "Failed to load market history."
+        meta: buildApiMeta({
+          source: "cache",
+          stale: true,
+          updatedAt: cached.updatedAt,
+          warning:
+            error instanceof Error
+              ? error.message
+              : "Failed to load market history.",
+          fallbackUsed: true
+        })
       });
     }
 
     return NextResponse.json({
       points: [],
-      warning:
-        error instanceof Error
-          ? error.message
-          : "Failed to load market history."
+      meta: buildApiMeta({
+        source: "rpc",
+        stale: true,
+        warning:
+          error instanceof Error
+            ? error.message
+            : "Failed to load market history."
+      })
     });
   }
 }

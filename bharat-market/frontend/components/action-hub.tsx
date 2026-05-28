@@ -38,6 +38,8 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
   const [creationFee, setCreationFee] = useState<bigint | null>(null);
   const [usdcBalance, setUsdcBalance] = useState<bigint>(0n);
   const [creationAllowance, setCreationAllowance] = useState<bigint>(0n);
+  const [walletLoading, setWalletLoading] = useState(false);
+  const [walletError, setWalletError] = useState<string | null>(null);
 
   const { writeContractAsync, isPending } = useWriteContract();
   const { isSuccess: mintSuccess, isLoading: mintConfirming } = useWaitForTransactionReceipt({
@@ -69,6 +71,8 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
       if (!addresses) return;
 
       try {
+        setWalletLoading(true);
+        setWalletError(null);
         const params = new URLSearchParams();
         if (address) {
           params.set("account", address);
@@ -91,12 +95,14 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
           setCreationFee(BigInt(payload.creationFee));
           setUsdcBalance(BigInt(payload.usdcBalance ?? "0"));
           setCreationAllowance(BigInt(payload.creationAllowance ?? "0"));
+          setWalletLoading(false);
         }
-      } catch {
+      } catch (err) {
         if (!cancelled) {
           setCreationFee(null);
-          setUsdcBalance(0n);
           setCreationAllowance(0n);
+          setWalletError(err instanceof Error ? err.message : "Wallet sync unavailable.");
+          setWalletLoading(false);
         }
       }
     }
@@ -477,7 +483,11 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <PreviewMetric icon={WalletCards} label="Wallet Balance" value={formatUsdc(usdcBalance ?? 0n)} />
+              <PreviewMetric
+                icon={WalletCards}
+                label="Wallet Balance"
+                value={walletLoading ? "Syncing" : walletError ? "Unavailable" : formatUsdc(usdcBalance ?? 0n)}
+              />
               <PreviewMetric icon={Coins} label="Creation Fee" value={formatUsdc(requiredFee)} />
               <PreviewMetric icon={Sparkles} label="Oracle Type" value={createForm.oracleType || "--"} />
               <PreviewMetric icon={TimerReset} label="Expiry Window" value={durationLabel} />

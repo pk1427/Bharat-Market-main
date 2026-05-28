@@ -13,6 +13,7 @@ export const marketAbi = parseAbi([
   "event Redeemed(address indexed user, uint256 payout)",
   "event LiquidityAdded(address indexed provider, uint256 amount)",
   "event LiquidityRemoved(address indexed provider, uint256 amount)",
+  "function owner() view returns (address)",
   "function priceYes() view returns (uint256)",
   "function priceNo() view returns (uint256)",
   "function yesPool() view returns (uint256)",
@@ -36,7 +37,8 @@ export const marketAbi = parseAbi([
 
 export const outcomeTokenAbi = parseAbi([
   "function balanceOf(address owner) view returns (uint256)",
-  "function totalSupply() view returns (uint256)"
+  "function totalSupply() view returns (uint256)",
+  "function name() view returns (string)"
 ]);
 
 export const mockUsdcAbi = parseAbi([

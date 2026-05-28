@@ -16,17 +16,24 @@ import {
 } from "lucide-react";
 
 import { MarketList } from "@/components/market-list";
+import { DevSyncStatus } from "@/components/dev-sync-status";
 import { GlowBadge } from "@/components/ui/glow-badge";
 import { SectionHeader } from "@/components/ui/section-header";
 import { TickerRow } from "@/components/ui/ticker-row";
+import { useBoardAnalytics } from "@/hooks/use-board-analytics";
+import { useIndexerStatus } from "@/hooks/use-indexer-status";
+import { useLiveBoardStream } from "@/hooks/use-live-stream";
 import { useMarketBoard } from "@/hooks/use-market-board";
 import { formatPercent, formatProbabilityNumber, formatUsdcCompact } from "@/lib/format";
 
 export default function HomePage() {
   const [marketRefreshTick] = useState(0);
+  const boardStream = useLiveBoardStream();
+  const indexerStatus = useIndexerStatus();
   const { markets, loading, error, warning, refresh } = useMarketBoard({
     externalRefreshTick: marketRefreshTick
   });
+  const analytics = useBoardAnalytics();
 
   const boardMetrics = useMemo(() => {
     const activeMarkets = markets.filter((market) => market.status === "active");
@@ -35,20 +42,30 @@ export default function HomePage() {
     const totalVolume = markets.reduce((sum, market) => sum + market.volume, 0n);
     const totalLiquidity = markets.reduce((sum, market) => sum + market.liquidity, 0n);
     const liveTraders = markets.reduce((sum, market) => sum + market.traderCount, 0);
-    const featured = [...markets]
+    const categoryItems = [...markets.reduce((map, market) => {
+      map.set(market.category, (map.get(market.category) ?? 0) + 1);
+      return map;
+    }, new Map<string, number>())]
+      .sort((left, right) => right[1] - left[1])
+      .slice(0, 3);
+    const featured = (analytics.trending.length > 0 ? analytics.trending : [...markets])
+      .slice()
       .sort((left, right) => {
         const scoreLeft = Number(left.volume + left.liquidity / 4n) + left.traderCount * 1_000_000;
         const scoreRight = Number(right.volume + right.liquidity / 4n) + right.traderCount * 1_000_000;
         return scoreRight - scoreLeft;
       })
       .slice(0, 4);
-    const topMovers = [...markets]
-      .sort(
-        (left, right) =>
-          Math.abs(formatProbabilityNumber(right.yesProbability) - 50) -
-          Math.abs(formatProbabilityNumber(left.yesProbability) - 50)
-      )
-      .slice(0, 3);
+    const topMovers =
+      analytics.topMovers.length > 0
+        ? analytics.topMovers.slice(0, 3)
+        : [...markets]
+            .sort(
+              (left, right) =>
+                Math.abs(formatProbabilityNumber(right.yesProbability) - 50) -
+                Math.abs(formatProbabilityNumber(left.yesProbability) - 50)
+            )
+            .slice(0, 3);
 
     return {
       activeMarkets,
@@ -57,10 +74,11 @@ export default function HomePage() {
       totalVolume,
       totalLiquidity,
       liveTraders,
+      categoryItems,
       featured,
       topMovers
     };
-  }, [markets]);
+  }, [analytics.topMovers, analytics.trending, markets]);
 
   const tickerItems = useMemo(
     () =>
@@ -94,6 +112,27 @@ export default function HomePage() {
                 label={boardMetrics.activeMarkets.length > 0 ? "Live markets on board" : "Board in watch mode"}
                 tone={boardMetrics.activeMarkets.length > 0 ? "mint" : "slate"}
                 pulse={boardMetrics.activeMarkets.length > 0}
+              />
+              <GlowBadge
+                label={boardStream.status === "live" ? "Live stream connected" : boardStream.status === "fallback" ? "Fallback sync" : "Stream reconnecting"}
+                tone={boardStream.status === "live" ? "mint" : boardStream.status === "fallback" ? "gold" : "slate"}
+                pulse={boardStream.status === "live"}
+              />
+              <GlowBadge
+                label={
+                  indexerStatus.data?.freshness.fresh
+                    ? "Indexer fresh"
+                    : indexerStatus.data?.freshness.state === "stale"
+                      ? "Indexer stale"
+                      : "Indexer warming"
+                }
+                tone={
+                  indexerStatus.data?.freshness.fresh
+                    ? "mint"
+                    : indexerStatus.data?.freshness.state === "stale"
+                      ? "gold"
+                      : "slate"
+                }
               />
             </div>
 
@@ -263,10 +302,7 @@ export default function HomePage() {
 
           <MarketList
             externalRefreshTick={marketRefreshTick}
-            markets={markets}
-            loading={loading}
-            error={error}
-            warning={warning}
+            board={{ markets, total: markets.length, loading, error, warning, meta: null, refresh }}
           />
         </div>
 
@@ -275,11 +311,19 @@ export default function HomePage() {
             eyebrow="Board Structure"
             title="Categories in play"
             items={[
-              {
-                label: "Cricket",
-                value: String(markets.filter((market) => market.category.toLowerCase() === "cricket").length),
-                helper: "markets on board"
-              },
+              ...(boardMetrics.categoryItems.length > 0
+                ? boardMetrics.categoryItems.map(([category, count]) => ({
+                    label: category,
+                    value: String(count),
+                    helper: "markets on board"
+                  }))
+                : [
+                    {
+                      label: "Categories",
+                      value: "0",
+                      helper: "markets on board"
+                    }
+                  ]),
               {
                 label: "Live",
                 value: String(boardMetrics.activeMarkets.length),
@@ -322,6 +366,7 @@ export default function HomePage() {
               }
             ]}
           />
+          <DevSyncStatus />
         </div>
       </section>
     </main>

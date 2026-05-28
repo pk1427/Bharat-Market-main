@@ -1,28 +1,26 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 
+import { fetchApi } from "@/services/api-client";
+import type { ApiMeta } from "@/types/product";
 import type { ActivityItem } from "@/types/product";
 
 type ActivityPayload = {
   items: Array<Omit<ActivityItem, "amount" | "shares"> & { amount: string; shares?: string }>;
-  error?: string;
-  warning?: string;
+  meta?: ApiMeta;
 };
 
 export function useActivityFeed(marketAddress: string) {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: ["activity", marketAddress],
     enabled: Boolean(marketAddress),
-    queryFn: async () => {
-      const response = await fetch(`/api/markets/${marketAddress}/activity`, {
-        cache: "no-store"
-      });
-      const payload = (await response.json()) as ActivityPayload;
-
-      if (!response.ok) {
-        throw new Error(payload.error ?? "Failed to load activity.");
-      }
+    initialPageParam: null as string | null,
+    queryFn: async ({ pageParam }) => {
+      const cursor = pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : "";
+      const payload = await fetchApi<ActivityPayload>(
+        `/api/markets/${marketAddress}/activity?limit=40${cursor}`
+      );
 
       return {
         items: payload.items.map((item) => ({
@@ -30,9 +28,13 @@ export function useActivityFeed(marketAddress: string) {
           amount: BigInt(item.amount),
           shares: item.shares ? BigInt(item.shares) : undefined
         })),
-        warning: payload.warning ?? null
+        meta: payload.meta ?? null
       };
     },
-    refetchInterval: 30_000
+    getNextPageParam: (lastPage) => lastPage.meta?.cursor ?? undefined,
+    maxPages: 3,
+    staleTime: 20_000,
+    refetchInterval: 90_000,
+    refetchOnWindowFocus: false
   });
 }

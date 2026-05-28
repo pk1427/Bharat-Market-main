@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
 
 import { MarketCard } from "@/components/market-card";
@@ -12,61 +12,46 @@ import type { MarketStatus, MarketSummary } from "@/lib/market-data";
 
 export function MarketList({
   externalRefreshTick = 0,
-  markets: providedMarkets,
-  loading: providedLoading,
-  error: providedError,
-  warning: providedWarning
+  board: initialBoard
 }: {
   externalRefreshTick?: number;
-  markets?: MarketSummary[];
-  loading?: boolean;
-  error?: string | null;
-  warning?: string | null;
+  board?: ReturnType<typeof useMarketBoard>;
 }) {
-  const board = useMarketBoard({
-    externalRefreshTick,
-    enabled: providedMarkets === undefined
-  });
-  const markets = providedMarkets ?? board.markets;
-  const loading = providedLoading ?? board.loading;
-  const error = providedError ?? board.error;
-  const warning = providedWarning ?? board.warning;
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | MarketStatus>("all");
+  const [page, setPage] = useState(0);
+  const deferredQuery = useDeferredValue(query);
+  const pageSize = 12;
 
-  const filteredMarkets = useMemo(() => {
-    const statusRank: Record<MarketStatus, number> = {
-      active: 0,
-      awaiting: 1,
-      resolved: 2
-    };
+  useEffect(() => {
+    setPage(0);
+  }, [deferredQuery, statusFilter]);
 
-    return [...markets]
-      .filter((market) => (statusFilter === "all" ? true : market.status === statusFilter))
-      .filter((market) =>
-        query.trim().length === 0
-          ? true
-          : `${market.question} ${market.category} ${market.oracleQuery}`
-              .toLowerCase()
-              .includes(query.toLowerCase())
-      )
-      .sort((left, right) => {
-        const byStatus = statusRank[left.status] - statusRank[right.status];
-        if (byStatus !== 0) return byStatus;
-        const byVolume = Number(right.volume - left.volume);
-        if (byVolume !== 0) return byVolume;
-        return Number(right.liquidity - left.liquidity);
-      });
-  }, [markets, query, statusFilter]);
+  const boardQuery = useMarketBoard({
+    externalRefreshTick,
+    search: deferredQuery,
+    status: statusFilter,
+    limit: pageSize,
+    offset: page * pageSize
+  });
+  const board =
+    !deferredQuery && statusFilter === "all" && page === 0 && initialBoard ? initialBoard : boardQuery;
+  const markets = board.markets;
+  const loading = board.loading;
+  const error = board.error;
+  const warning = board.warning;
+  const total = board.total;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-  const counts = useMemo(
-    () => ({
-      active: markets.filter((market) => market.status === "active").length,
-      awaiting: markets.filter((market) => market.status === "awaiting").length,
-      resolved: markets.filter((market) => market.status === "resolved").length
-    }),
-    [markets]
-  );
+  const pageSummary = useMemo(() => {
+    if (total === 0) {
+      return "0 results";
+    }
+
+    const start = page * pageSize + 1;
+    const end = Math.min(total, start + markets.length - 1);
+    return `${start}-${end} of ${total}`;
+  }, [markets.length, page, total]);
 
   if (loading) {
     return (
@@ -82,11 +67,15 @@ export function MarketList({
     return <ErrorState message={error} />;
   }
 
-  if (markets.length === 0) {
+  if (total === 0) {
     return (
       <EmptyState
-        title="No Markets Yet"
-        description="Create your first market and it will appear here with live pricing, liquidity, and resolution status."
+        title={deferredQuery || statusFilter !== "all" ? "No Matching Markets" : "No Markets Yet"}
+        description={
+          deferredQuery || statusFilter !== "all"
+            ? "Try a different search or switch board views to surface more contracts."
+            : "Create your first market and it will appear here with live pricing, liquidity, and resolution status."
+        }
       />
     );
   }
@@ -114,40 +103,57 @@ export function MarketList({
         <div className="flex flex-wrap gap-2">
           <BoardFilter
             active={statusFilter === "all"}
-            label={`All (${markets.length})`}
+            label={`All (${total})`}
             onClick={() => setStatusFilter("all")}
           />
           <BoardFilter
             active={statusFilter === "active"}
-            label={`Live (${counts.active})`}
+            label="Live"
             onClick={() => setStatusFilter("active")}
           />
           <BoardFilter
             active={statusFilter === "awaiting"}
-            label={`Awaiting (${counts.awaiting})`}
+            label="Awaiting"
             onClick={() => setStatusFilter("awaiting")}
           />
           <BoardFilter
             active={statusFilter === "resolved"}
-            label={`Resolved (${counts.resolved})`}
+            label="Resolved"
             onClick={() => setStatusFilter("resolved")}
           />
         </div>
       </div>
       </div>
-
-      {filteredMarkets.length === 0 ? (
-        <EmptyState
-          title="No Matching Markets"
-          description="Try a different search or switch board views to surface more contracts."
-        />
-      ) : (
       <div className="grid gap-4 xl:grid-cols-2 2xl:grid-cols-3">
-        {filteredMarkets.map((market) => (
+        {markets.map((market) => (
           <MarketCard key={market.address} market={market} />
         ))}
       </div>
-      )}
+
+      <div className="flex flex-col gap-3 rounded-[20px] bg-white/[0.03] px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-slate-400">Showing {pageSummary}</p>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setPage((current) => Math.max(0, current - 1))}
+            disabled={page === 0}
+            className="rounded-[14px] border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-slate-300 transition hover:border-white/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Previous
+          </button>
+          <span className="px-2 text-xs uppercase tracking-[0.22em] text-slate-500">
+            Page {page + 1} / {totalPages}
+          </span>
+          <button
+            type="button"
+            onClick={() => setPage((current) => Math.min(totalPages - 1, current + 1))}
+            disabled={page >= totalPages - 1 || !board.meta?.hasMore}
+            className="rounded-[14px] border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-slate-300 transition hover:border-white/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Next
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

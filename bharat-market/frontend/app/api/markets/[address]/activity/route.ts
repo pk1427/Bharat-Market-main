@@ -1,6 +1,8 @@
+import { buildApiMeta } from "@/backend/api/response";
 import { NextRequest, NextResponse } from "next/server";
 import { getAddress } from "viem";
 
+import { getIndexedMarketActivity } from "@/backend/services/activity";
 import { chainlinkFunctionsOracleAbi, marketAbi, marketFactoryAbi } from "@/lib/abis";
 import { getRequiredAddresses } from "@/lib/contracts";
 import { fetchMarketDetail } from "@/lib/market-data";
@@ -282,6 +284,29 @@ export async function GET(
     const { address } = await context.params;
     const marketAddress = getAddress(address);
     const forceFresh = _request.nextUrl.searchParams.get("fresh") === "1";
+    const limit = Number(_request.nextUrl.searchParams.get("limit") ?? "100");
+    const cursor = _request.nextUrl.searchParams.get("cursor");
+    if (!forceFresh) {
+      const indexedActivity = await getIndexedMarketActivity(
+        marketAddress,
+        {
+          limit: Number.isFinite(limit) ? Math.min(limit, 200) : 100,
+          cursor
+        }
+      );
+      if (indexedActivity) {
+        return NextResponse.json({
+          items: indexedActivity.items,
+          meta: buildApiMeta({
+            source: "indexed",
+            indexed: true,
+            cursor: indexedActivity.nextCursor,
+            hasMore: Boolean(indexedActivity.nextCursor)
+          })
+        });
+      }
+    }
+
     const cached = await getCachedActivity(marketAddress);
     if (!forceFresh && cached) {
       if (!isFresh(cached.updatedAt, ACTIVITY_TTL_MS)) {
@@ -292,16 +317,22 @@ export async function GET(
 
       return NextResponse.json({
         items: cached.data,
-        stale: !isFresh(cached.updatedAt, ACTIVITY_TTL_MS),
-        updatedAt: cached.updatedAt,
-        cached: true
+        meta: buildApiMeta({
+          source: "cache",
+          stale: !isFresh(cached.updatedAt, ACTIVITY_TTL_MS),
+          updatedAt: cached.updatedAt,
+          fallbackUsed: true
+        })
       });
     }
 
     const payload = await buildMarketActivitySnapshot(addresses, marketAddress);
 
     return NextResponse.json({
-      items: payload
+      items: payload,
+      meta: buildApiMeta({
+        source: "rpc"
+      })
     });
   } catch (error) {
     const { address } = await context.params;
@@ -310,21 +341,29 @@ export async function GET(
     if (cached) {
       return NextResponse.json({
         items: cached.data,
-        stale: true,
-        updatedAt: cached.updatedAt,
-        warning:
-          error instanceof Error
-            ? error.message
-            : "Failed to load activity."
+        meta: buildApiMeta({
+          source: "cache",
+          stale: true,
+          updatedAt: cached.updatedAt,
+          warning:
+            error instanceof Error
+              ? error.message
+              : "Failed to load activity.",
+          fallbackUsed: true
+        })
       });
     }
 
     return NextResponse.json({
       items: [],
-      warning:
-        error instanceof Error
-          ? error.message
-          : "Failed to load activity."
+      meta: buildApiMeta({
+        source: "rpc",
+        stale: true,
+        warning:
+          error instanceof Error
+            ? error.message
+            : "Failed to load activity."
+      })
     });
   }
 }

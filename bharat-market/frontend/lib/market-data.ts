@@ -192,9 +192,17 @@ export async function fetchMarketDetail(
   marketFactory: Address,
   marketAddress: Address,
   usdcAddress: Address,
-  account?: Address
+  account?: Address,
+  options: {
+    includeActivityStats?: boolean;
+    includeCreationMeta?: boolean;
+  } = {}
 ): Promise<MarketDetailData> {
-  const creationMap = await fetchMarketCreationMap(publicClient, marketFactory);
+  const includeActivityStats = options.includeActivityStats ?? true;
+  const includeCreationMeta = options.includeCreationMeta ?? includeActivityStats;
+  const created: CreationMeta | null = includeCreationMeta
+    ? await fetchMarketCreationMeta(publicClient, marketFactory, marketAddress)
+    : null;
   const [
     yesProbability,
     noProbability,
@@ -271,8 +279,8 @@ export async function fetchMarketDetail(
       abi: marketAbi,
       functionName: "lpToken"
     }),
-    fetchMarketVolume(publicClient, marketAddress),
-    fetchMarketTraderCount(publicClient, marketAddress)
+    includeActivityStats ? fetchMarketVolume(publicClient, marketAddress) : 0n,
+    includeActivityStats ? fetchMarketTraderCount(publicClient, marketAddress) : 0
   ]);
 
   const [yesBalance, noBalance, lpBalance, usdcBalance] = account
@@ -305,7 +313,6 @@ export async function fetchMarketDetail(
     : [0n, 0n, 0n, 0n];
 
   const status = getMarketStatus(resolved, endTime);
-  const created = creationMap.get(marketAddress.toLowerCase());
   const question = created?.question ?? deriveQuestion(oracleType, oracleQuery, marketAddress);
 
   return {
@@ -346,24 +353,24 @@ export async function fetchMarketVolume(
   marketAddress: Address,
   account?: Address
 ) {
-  const logs = await publicClient.getLogs({
+  const logs = await getLogsResilient(publicClient, {
     address: marketAddress,
     event: marketAbi[0],
     ...(account ? { args: { user: account } } : {}),
     fromBlock: getFromBlockHint()
   });
 
-  return logs.reduce((total, log) => total + (log.args.amountIn ?? 0n), 0n);
+  return logs.reduce((total: bigint, log: any) => total + (log.args.amountIn ?? 0n), 0n);
 }
 
 export async function fetchMarketTraderCount(publicClient: PublicClient, marketAddress: Address) {
-  const logs = await publicClient.getLogs({
+  const logs = await getLogsResilient(publicClient, {
     address: marketAddress,
     event: marketAbi[0],
     fromBlock: getFromBlockHint()
   });
 
-  return new Set(logs.flatMap((log) => (log.args.user ? [log.args.user.toLowerCase()] : []))).size;
+  return new Set(logs.flatMap((log: any) => (log.args.user ? [log.args.user.toLowerCase()] : []))).size;
 }
 
 export async function fetchAverageEntryBySide(
@@ -371,7 +378,7 @@ export async function fetchAverageEntryBySide(
   marketAddress: Address,
   account: Address
 ) {
-  const logs = await publicClient.getLogs({
+  const logs = await getLogsResilient(publicClient, {
     address: marketAddress,
     event: marketAbi[0],
     args: { user: account },
@@ -383,7 +390,7 @@ export async function fetchAverageEntryBySide(
   let noAmount = 0n;
   let noShares = 0n;
 
-  for (const log of logs) {
+  for (const log of logs as any[]) {
     const amountIn = log.args.amountIn;
     const sharesMinted = log.args.sharesMinted;
     if (amountIn === undefined || sharesMinted === undefined) {
@@ -409,14 +416,14 @@ export async function fetchMarketCreationMap(
   publicClient: PublicClient,
   marketFactory: Address
 ) {
-  const logs = await publicClient.getLogs({
+  const logs = await getLogsResilient(publicClient, {
     address: marketFactory,
     event: marketFactoryAbi[0],
     fromBlock: getFromBlockHint()
   });
 
   return new Map(
-    logs.flatMap((log) => {
+    logs.flatMap((log: any) => {
       const market = log.args.market;
       const creator = log.args.creator;
       const question = log.args.question;
@@ -437,6 +444,41 @@ export async function fetchMarketCreationMap(
       ];
     })
   );
+}
+
+export async function fetchMarketCreationMeta(
+  publicClient: PublicClient,
+  marketFactory: Address,
+  marketAddress: Address
+): Promise<CreationMeta | null> {
+  const logs = await getLogsResilient(publicClient, {
+    address: marketFactory,
+    event: marketFactoryAbi[0],
+    args: {
+      market: marketAddress
+    },
+    fromBlock: getFromBlockHint()
+  });
+
+  const log = logs[logs.length - 1];
+  if (!log) {
+    return null;
+  }
+
+  const market = log.args.market;
+  const creator = log.args.creator;
+  const question = log.args.question;
+  const endTime = log.args.endTime;
+
+  if (!market || question === undefined || endTime === undefined) {
+    return null;
+  }
+
+  return {
+    creator: creator ?? null,
+    question,
+    endTime
+  } satisfies CreationMeta;
 }
 
 export function serializeMarketSummary(summary: MarketSummary): MarketSummaryDto {
@@ -561,4 +603,51 @@ function getFromBlockHint() {
 
   const parsed = Number(value);
   return Number.isFinite(parsed) ? BigInt(parsed) : undefined;
+}
+
+async function getLogsResilient(publicClient: PublicClient, params: any): Promise<any[]> {
+  try {
+    return await publicClient.getLogs(params);
+  } catch (error) {
+    const details =
+      error instanceof Error
+        ? `${error.message} ${"details" in error ? String((error as { details?: unknown }).details ?? "") : ""}`
+        : "";
+    const fromBlock = parseBigIntBlock(params?.fromBlock, 0n);
+    const isRangeLimited = /block range exceeds configured limit|query returned more than|up to a 10 block range|free tier plan/i.test(
+      details
+    );
+
+    if (!params.toBlock && isRangeLimited) {
+      const latestBlock = await publicClient.getBlockNumber();
+      return getLogsResilient(publicClient, {
+        ...params,
+        toBlock: latestBlock
+      });
+    }
+
+    const toBlock = parseBigIntBlock(params?.toBlock, fromBlock + 10n);
+
+    if (fromBlock < toBlock && isRangeLimited) {
+      const range: bigint = toBlock - fromBlock;
+      const midpoint: bigint = fromBlock + range / 2n;
+      const left = await getLogsResilient(publicClient, {
+        ...params,
+        fromBlock,
+        toBlock: midpoint
+      });
+      const right = await getLogsResilient(publicClient, {
+        ...params,
+        fromBlock: midpoint + 1n,
+        toBlock
+      });
+      return [...left, ...right];
+    }
+
+    throw error;
+  }
+}
+
+function parseBigIntBlock(value: unknown, fallback: bigint) {
+  return typeof value === "bigint" ? value : fallback;
 }

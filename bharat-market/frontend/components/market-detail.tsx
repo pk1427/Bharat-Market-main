@@ -14,7 +14,7 @@ import {
   Users,
   Waves
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   useAccount,
   usePublicClient,
@@ -34,6 +34,7 @@ import { TxStatusNotice } from "@/components/ui/tx-status-notice";
 import { marketAbi } from "@/lib/abis";
 import { getRequiredAddresses } from "@/lib/contracts";
 import { getCappedGasLimit, getSafeFeeOverrides } from "@/lib/fees";
+import { useIndexerStatus } from "@/hooks/use-indexer-status";
 import {
   formatPercent,
   formatProbabilityNumber,
@@ -43,28 +44,24 @@ import {
   formatUsdc,
   shortenAddress
 } from "@/lib/format";
-import {
-  deserializeMarketDetail,
-  type MarketDetailData,
-  type MarketDetailDto
-} from "@/lib/market-data";
 import { recordMarketSnapshot } from "@/lib/history";
+import { useMarketDetail } from "@/hooks/use-market-detail";
 import { useMarketHistory } from "@/hooks/use-market-history";
+import { useLiveMarketStream } from "@/hooks/use-live-stream";
 import { failTxToast, handleTxToast, settleTxToast } from "@/lib/tx-toasts";
 
 export function MarketDetail({ address }: { address: string }) {
   const publicClient = usePublicClient();
   const { address: account } = useAccount();
-  const [market, setMarket] = useState<MarketDetailData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const detail = useMarketDetail(address);
+  const indexerStatus = useIndexerStatus();
+  const marketStream = useLiveMarketStream(address);
+  const market = detail.market;
   const [redeemHash, setRedeemHash] = useState<`0x${string}` | undefined>();
   const [redeemError, setRedeemError] = useState<string | null>(null);
   const [redeemToastId, setRedeemToastId] = useState<string | number | null>(null);
-  const [pendingRequest, setPendingRequest] = useState<`0x${string}` | null>(null);
-  const [warning, setWarning] = useState<string | null>(null);
-  const marketRef = useRef<MarketDetailData | null>(null);
-  const marketHistory = useMarketHistory(market);
+  const [chartRange, setChartRange] = useState<"1H" | "24H" | "ALL">("ALL");
+  const marketHistory = useMarketHistory(market, chartRange);
 
   const addresses = getRequiredAddresses();
   const { writeContractAsync, isPending: redeemPending } = useWriteContract();
@@ -78,62 +75,6 @@ export function MarketDetail({ address }: { address: string }) {
       enabled: Boolean(redeemHash)
     }
   });
-
-  useEffect(() => {
-    marketRef.current = market;
-  }, [market]);
-
-  const loadDetail = useCallback(async (forceFresh = false) => {
-    if (!addresses) {
-      setLoading(false);
-      setError(
-        "Missing frontend env configuration. Set NEXT_PUBLIC_MARKET_FACTORY_ADDRESS and NEXT_PUBLIC_USDC_ADDRESS."
-      );
-      return;
-    }
-
-    try {
-      if (!marketRef.current) {
-        setLoading(true);
-      }
-      setError(null);
-      setWarning(null);
-
-      const params = new URLSearchParams();
-      params.set("refresh", Date.now().toString());
-      if (forceFresh) {
-        params.set("fresh", "1");
-      }
-      if (account) {
-        params.set("account", account);
-      }
-      const response = await fetch(`/api/markets/${address}?${params.toString()}`, {
-        cache: "no-store"
-      });
-      const payload = (await response.json()) as {
-        market?: MarketDetailDto;
-        pendingRequest?: `0x${string}` | null;
-        error?: string;
-        warning?: string;
-      };
-
-      if (!response.ok || !payload.market) {
-        throw new Error(payload.error ?? "Failed to load market details.");
-      }
-
-      setMarket(deserializeMarketDetail(payload.market));
-      setPendingRequest(payload.pendingRequest ?? null);
-      setWarning(payload.warning ?? null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load market details.");
-    } finally {
-      setLoading(false);
-    }
-  }, [account, address, addresses]);
-
-  useEffect(() => {
-    void loadDetail();
-  }, [loadDetail]);
 
   useEffect(() => {
     if (!market) {
@@ -150,14 +91,14 @@ export function MarketDetail({ address }: { address: string }) {
 
   useEffect(() => {
     if (redeemReceipt?.status === "success") {
-      void loadDetail(true);
+      void detail.refresh(true);
       return;
     }
 
     if (redeemReceipt?.status === "reverted") {
       setRedeemError("Redeem transaction failed on-chain.");
     }
-  }, [loadDetail, redeemReceipt]);
+  }, [detail.refresh, redeemReceipt]);
 
   useEffect(() => {
     if (!redeemHash || !redeemReceiptError) {
@@ -219,14 +160,15 @@ export function MarketDetail({ address }: { address: string }) {
     }
   }
 
-  if (loading) {
+  if (detail.loading) {
     return <div className="glass rounded-[32px] p-10 text-slate-300">Loading market...</div>;
   }
 
-  if (error || !market || !addresses) {
+  if (detail.error || !market || !addresses) {
     return (
       <div className="glass rounded-[32px] border border-coral/20 bg-coral/10 p-8 text-coral">
-        {error ?? "Market not found."}
+        {detail.error ??
+          "Missing frontend env configuration. Set NEXT_PUBLIC_MARKET_FACTORY_ADDRESS and NEXT_PUBLIC_USDC_ADDRESS."}
       </div>
     );
   }
@@ -255,7 +197,7 @@ export function MarketDetail({ address }: { address: string }) {
         </Link>
         <button
           type="button"
-          onClick={() => void loadDetail(true)}
+          onClick={() => void detail.refresh(true)}
           className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs uppercase tracking-[0.25em] text-slate-300 transition hover:border-white/20 hover:text-white"
         >
           Refresh Market
@@ -274,6 +216,27 @@ export function MarketDetail({ address }: { address: string }) {
               <GlowBadge label={market.category} tone="slate" />
               <GlowBadge label={momentum} tone={yesPercent >= 50 ? "mint" : "coral"} />
               <GlowBadge label={sentiment} tone="gold" />
+              <GlowBadge
+                label={marketStream.status === "live" ? "Live tape connected" : marketStream.status === "fallback" ? "Fallback sync" : "Stream reconnecting"}
+                tone={marketStream.status === "live" ? "mint" : marketStream.status === "fallback" ? "gold" : "slate"}
+                pulse={marketStream.status === "live"}
+              />
+              <GlowBadge
+                label={
+                  indexerStatus.data?.freshness.fresh
+                    ? "Indexer fresh"
+                    : indexerStatus.data?.freshness.state === "stale"
+                      ? "Indexer stale"
+                      : "Indexer warming"
+                }
+                tone={
+                  indexerStatus.data?.freshness.fresh
+                    ? "mint"
+                    : indexerStatus.data?.freshness.state === "stale"
+                      ? "gold"
+                      : "slate"
+                }
+              />
             </div>
 
             <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_280px] xl:items-start">
@@ -336,9 +299,9 @@ export function MarketDetail({ address }: { address: string }) {
           </div>
         </div>
 
-        {warning ? (
+        {detail.warning ? (
           <p className="border-t border-white/6 px-6 py-4 text-sm text-gold sm:px-8">
-            Showing cached backend data because Polygon Amoy RPC is unstable right now.
+            {detail.warning}
           </p>
         ) : null}
       </Panel>
@@ -370,6 +333,8 @@ export function MarketDetail({ address }: { address: string }) {
 
           <MarketPriceChart
             history={marketHistory.history}
+            range={chartRange}
+            onRangeChange={setChartRange}
             loading={marketHistory.isLoading}
             warning={marketHistory.warning}
           />
@@ -462,7 +427,7 @@ export function MarketDetail({ address }: { address: string }) {
             marketAddress={market.address}
             usdcAddress={addresses.usdc}
             disabled={marketClosed}
-            onComplete={() => void loadDetail(true)}
+            onComplete={() => void detail.refresh(true)}
           />
           <LiquidityPanel
             marketAddress={market.address}
@@ -470,15 +435,15 @@ export function MarketDetail({ address }: { address: string }) {
             lpTokenAddress={market.lpToken}
             lpBalance={market.lpBalance}
             disabled={market.resolved}
-            onComplete={() => void loadDetail(true)}
+            onComplete={() => void detail.refresh(true)}
           />
           <ResolutionPanel
             marketAddress={market.address}
             chainlinkOracleAddress={addresses.chainlinkOracle ?? null}
             marketResolved={market.resolved}
             endTime={market.endTime}
-            pendingRequest={pendingRequest}
-            onComplete={() => void loadDetail(true)}
+            pendingRequest={detail.pendingRequest}
+            onComplete={() => void detail.refresh(true)}
           />
         </div>
       </section>
