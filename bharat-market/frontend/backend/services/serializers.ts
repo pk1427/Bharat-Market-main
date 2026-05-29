@@ -6,7 +6,13 @@ import type {
   PositionSide
 } from "@/types/product";
 import type { MarketDetailDto, MarketStatus, MarketSummaryDto } from "@/lib/market-data";
-import { getCategoryLabel, getOracleSourceLabel } from "@/lib/market-meta";
+import { getCategoryLabel } from "@/lib/market-meta";
+import {
+  decodeOracleMetadata,
+  getOracleProviderLabel,
+  normalizeOracleMetadata,
+  summarizeOracleMetadata
+} from "@/lib/oracle-metadata";
 
 export function getMarketStatus(resolved: boolean, endTime: Date): MarketStatus {
   const now = Date.now();
@@ -44,6 +50,12 @@ export function toMarketSummaryDto(market: {
   question: string;
   oracleType: string;
   oracleQuery: string;
+  oracleMetadata?: unknown;
+  settlementProvider?: string | null;
+  settlementPrice?: bigint | number | string | null;
+  settlementObservedAt?: Date | null;
+  settlementPayloadHash?: string | null;
+  settlementSummary?: string | null;
   latestYesProbability: bigint | number | string;
   latestNoProbability: bigint | number | string;
   totalLiquidity: bigint | number | string;
@@ -58,15 +70,31 @@ export function toMarketSummaryDto(market: {
   const noProbability = toBigIntValue(market.latestNoProbability);
   const liquidity = toBigIntValue(market.totalLiquidity);
   const volume = toBigIntValue(market.totalVolume);
+  const providerMetadata = decodeOracleMetadataFromMarket(market);
+  const summarizedMetadata = summarizeOracleMetadata(providerMetadata);
+  const oracleMetadata = summarizedMetadata
+    ? {
+        ...summarizedMetadata,
+        settlementProvider: market.settlementProvider ?? null,
+        settlementPrice:
+          market.settlementPrice !== null && market.settlementPrice !== undefined
+            ? toBigIntValue(market.settlementPrice).toString()
+            : null,
+        settlementObservedAt: market.settlementObservedAt?.toISOString() ?? null,
+        settlementPayloadHash: market.settlementPayloadHash ?? null,
+        settlementSummary: market.settlementSummary ?? null
+      }
+    : null;
 
   return {
     address: market.marketAddress as `0x${string}`,
     creator: market.creator as `0x${string}` | null,
     question: market.question,
     category: getCategoryLabel(market.oracleType, market.oracleQuery),
-    oracleSource: getOracleSourceLabel(market.oracleType),
+    oracleSource: getOracleProviderLabel(providerMetadata, market.oracleType),
     oracleType: market.oracleType,
     oracleQuery: market.oracleQuery,
+    oracleMetadata,
     yesProbability: yesProbability.toString(),
     noProbability: noProbability.toString(),
     liquidity: liquidity.toString(),
@@ -101,6 +129,7 @@ export function toMarketDetailDto(params: {
     yesToken: string | null;
     noToken: string | null;
     lpToken: string | null;
+    oracleMetadata?: unknown;
   };
   account?: {
     yesBalance: bigint;
@@ -125,6 +154,14 @@ export function toMarketDetailDto(params: {
     winningOutcome,
     winningLabel: winningOutcome === 1 ? "YES" : winningOutcome === 2 ? "NO" : "Pending"
   };
+}
+
+function decodeOracleMetadataFromMarket(market: { oracleQuery: string; oracleMetadata?: unknown }) {
+  return decodeOracleMetadata(market.oracleQuery) ?? decodeOracleMetadataFromJson(market.oracleMetadata);
+}
+
+function decodeOracleMetadataFromJson(value: unknown) {
+  return normalizeOracleMetadata(value);
 }
 
 function toBigIntValue(value: bigint | number | string) {
@@ -207,6 +244,7 @@ export function serializeActivityItem(item: ActivityItem) {
   return {
     ...item,
     amount: item.amount.toString(),
-    shares: item.shares?.toString()
+    shares: item.shares?.toString(),
+    settlementPrice: item.settlementPrice?.toString()
   };
 }

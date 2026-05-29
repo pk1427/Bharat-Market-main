@@ -159,7 +159,9 @@ export function CreatorDashboard() {
                       <h3 className="text-xl font-semibold tracking-[-0.03em] text-white">
                         {market.question}
                       </h3>
-                      <p className="mt-2 text-xs text-slate-500">{market.oracleQuery}</p>
+                      <p className="mt-2 text-xs text-slate-500">
+                        {market.oracleMetadata?.externalId ?? market.oracleQuery}
+                      </p>
                     </div>
                     <StatusBadge
                       label={market.statusLabel}

@@ -134,6 +134,8 @@ export async function getIndexedMarketActivity(
       type,
       amount: 0n,
       outcome: event.outcome ?? undefined,
+      settlementPrice: event.settlementPrice ?? undefined,
+      summary: event.summary,
       timestamp: event.timestamp.getTime(),
       whale: false
     });

@@ -154,6 +154,12 @@ export function ActivityFeed({ marketAddress }: { marketAddress: string }) {
                 {item.shares ? (
                   <p className="text-xs text-slate-500">Shares {formatShares(item.shares)}</p>
                 ) : null}
+                {item.settlementPrice ? (
+                  <p className="text-xs text-mint">CoinGecko price {formatOraclePrice(item.settlementPrice)}</p>
+                ) : null}
+                {item.summary ? (
+                  <p className="max-w-[260px] text-xs text-slate-500">{item.summary}</p>
+                ) : null}
                 <a
                   href={`https://amoy.polygonscan.com/tx/${item.txHash}`}
                   target="_blank"
@@ -179,4 +185,11 @@ export function ActivityFeed({ marketAddress }: { marketAddress: string }) {
       </div>
     </Panel>
   );
+}
+
+function formatOraclePrice(value: bigint) {
+  const whole = value / 100_000_000n;
+  const fraction = value % 100_000_000n;
+  const trimmedFraction = fraction.toString().padStart(8, "0").replace(/0+$/, "");
+  return `$${trimmedFraction ? `${whole.toString()}.${trimmedFraction}` : whole.toString()}`;
 }

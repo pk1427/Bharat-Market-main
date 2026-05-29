@@ -6,6 +6,7 @@
     "compile": "hardhat compile",
     "test": "hardhat test",
     "deploy:all": "hardhat run scripts/deployAll.ts --network amoy",
+    "deploy:chainlink-oracle": "hardhat run scripts/deployChainlinkOracle.ts --network amoy",
     "sync:frontend-env": "hardhat run scripts/writeFrontendEnv.ts --network amoy",
     "resolve": "hardhat run scripts/requestResolution.ts --network amoy",
     "node": "hardhat node",

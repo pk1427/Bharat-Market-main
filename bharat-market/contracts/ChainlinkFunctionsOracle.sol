@@ -83,7 +83,10 @@ contract ChainlinkFunctionsOracle is FunctionsClient, Ownable {
     event ResolutionFulfilled(
         bytes32 indexed requestId,
         address indexed market,
-        uint8 outcome
+        uint8 outcome,
+        uint256 settlementPriceE8,
+        string provider,
+        string externalId
     );
 
     event ResolutionFailed(
@@ -194,8 +197,21 @@ contract ChainlinkFunctionsOracle is FunctionsClient, Ownable {
             return;
         }
 
-        // Decode outcome — JS must return abi.encode(uint256) with value 1 or 2
+        // Decode outcome. New crypto scripts pack outcome + settlement price:
+        // packed = outcome * 1e18 + priceE8. Legacy scripts may still return 1 or 2.
         uint256 raw = abi.decode(response, (uint256));
+        uint256 settlementPriceE8 = 0;
+        string memory provider = "";
+        string memory externalId = "";
+
+        if (raw > 2) {
+            uint256 packedOutcome = raw / 1e18;
+            settlementPriceE8 = raw % 1e18;
+            raw = packedOutcome;
+
+            (provider, externalId) = _resolutionLabels(market);
+        }
+
         require(raw == 1 || raw == 2, "Invalid outcome from oracle");
 
         uint8 outcome = uint8(raw);
@@ -203,7 +219,23 @@ contract ChainlinkFunctionsOracle is FunctionsClient, Ownable {
         // Route through MarketOracle (security layer)
         IMarketOracle(marketOracle).resolveMarket(market, outcome);
 
-        emit ResolutionFulfilled(requestId, market, outcome);
+        emit ResolutionFulfilled(requestId, market, outcome, settlementPriceE8, provider, externalId);
+    }
+
+    function _resolutionLabels(address market) internal view returns (string memory provider, string memory externalId) {
+        IMarketMeta meta = IMarketMeta(market);
+        string memory oType = meta.oracleType();
+        string memory oQuery = meta.oracleQuery();
+
+        if (_startsWith(oQuery, "bm:v1:")) {
+            return ("coingecko", "");
+        }
+
+        if (_eq(oType, "crypto")) {
+            return ("coingecko", oQuery);
+        }
+
+        return ("", "");
     }
 
     // -----------------------------------------------
@@ -219,17 +251,59 @@ contract ChainlinkFunctionsOracle is FunctionsClient, Ownable {
         return
             "const oracleType  = args[0];"
             "const oracleQuery = args[1];"
+            "const PACK = 1000000000000000000n;"
             ""
+            "function decodeMeta(q){"
+            "  if (!q.startsWith('bm:v1:')) return null;"
+            "  const b64 = q.slice(6).replace(/-/g,'+').replace(/_/g,'/');"
+            "  return JSON.parse(Buffer.from(b64,'base64').toString('utf8'));"
+            "}"
+            "const meta = decodeMeta(oracleQuery);"
             "let outcome;"
+            "let settlementPriceE8 = 0;"
             ""
-            "if (oracleType === 'crypto') {"
-            "  const coin = oracleQuery.replace('_price', '');"
+            "if (meta && meta.category === 'crypto') {"
+            "  const ids = { BTC:'bitcoin', BITCOIN:'bitcoin', ETH:'ethereum', ETHEREUM:'ethereum', SOL:'solana', SOLANA:'solana', USDC:'usd-coin', 'USD-COIN':'usd-coin' };"
+            "  const coin = ids[String(meta.asset).toUpperCase()] || ids[String(meta.externalId || '').toUpperCase()];"
+            "  if (!coin) throw Error('Unsupported CoinGecko asset');"
+            "  const from = Number(meta.settlementTimestamp);"
+            "  const to = from + 600;"
+            "  const url = `https://api.coingecko.com/api/v3/coins/${coin}/market_chart/range?vs_currency=usd&from=${from}&to=${to}`;"
+            "  const res = await Functions.makeHttpRequest({ url });"
+            "  if (res.error || !Array.isArray(res.data?.prices)) throw Error('CoinGecko fetch failed');"
+            "  const point = res.data.prices.find(p => Number(p[0]) >= from * 1000 && Number.isFinite(Number(p[1])));"
+            "  if (!point) throw Error('CoinGecko settlement price unavailable');"
+            "  const price = Number(point[1]);"
+            "  const target = Number(meta.targetPrice);"
+            "  const above = String(meta.marketType).includes('above');"
+            "  outcome = above ? (price >= target ? 1 : 2) : (price <= target ? 1 : 2);"
+            "  settlementPriceE8 = Math.round(price * 100000000);"
+            ""
+            "} else if (meta && meta.category === 'cricket') {"
+            "  const apiKey = secrets.CRICAPI_KEY;"
+            "  const url = `https://api.cricapi.com/v1/match_info?apikey=${apiKey}&id=${meta.matchId}`;"
+            "  const res = await Functions.makeHttpRequest({ url });"
+            "  if (res.error || !res.data?.data) throw Error('CricAPI fetch failed');"
+            "  const match = res.data.data;"
+            "  if (!match.matchEnded || !match.matchWinner) throw Error('Match not completed');"
+            "  const winner = String(match.matchWinner).toUpperCase();"
+            "  const selected = String(meta.selectedTeam).toUpperCase();"
+            "  outcome = (winner.includes(selected) || selected.includes(winner)) ? 1 : 2;"
+            ""
+            "} else if (meta && meta.category === 'election') {"
+            "  throw Error('Election oracle provider not enabled on-chain');"
+            ""
+            "} else if (oracleType === 'crypto') {"
+            "  const ids = { btc:'bitcoin', eth:'ethereum', sol:'solana', usdc:'usd-coin' };"
+            "  const rawCoin = oracleQuery.replace('_price', '');"
+            "  const coin = ids[rawCoin] || rawCoin;"
             "  const url  = `https://api.coingecko.com/api/v3/simple/price?ids=${coin}&vs_currencies=usd`;"
             "  const res  = await Functions.makeHttpRequest({ url });"
             "  if (res.error) throw Error('CoinGecko fetch failed');"
             "  const price     = res.data[coin].usd;"
             "  const threshold = 100000;"
             "  outcome = price >= threshold ? 1 : 2;"
+            "  settlementPriceE8 = Math.round(Number(price) * 100000000);"
             ""
             "} else if (oracleType === 'sports') {"
             "  const apiKey = secrets.ODDS_API_KEY;"
@@ -256,7 +330,23 @@ contract ChainlinkFunctionsOracle is FunctionsClient, Ownable {
             "  throw Error('Unknown oracleType: ' + oracleType);"
             "}"
             ""
-            "return Functions.encodeUint256(outcome);";
+            "return Functions.encodeUint256(settlementPriceE8 > 0 ? (BigInt(outcome) * PACK + BigInt(settlementPriceE8)).toString() : outcome);";
+    }
+
+    function _startsWith(string memory value, string memory prefix) internal pure returns (bool) {
+        bytes memory valueBytes = bytes(value);
+        bytes memory prefixBytes = bytes(prefix);
+        if (valueBytes.length < prefixBytes.length) return false;
+
+        for (uint256 i = 0; i < prefixBytes.length; i++) {
+            if (valueBytes[i] != prefixBytes[i]) return false;
+        }
+
+        return true;
+    }
+
+    function _eq(string memory left, string memory right) internal pure returns (bool) {
+        return keccak256(bytes(left)) == keccak256(bytes(right));
     }
 
     // -----------------------------------------------

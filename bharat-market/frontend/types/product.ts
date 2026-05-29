@@ -65,6 +65,21 @@ export type ApiMeta = {
   range?: "1H" | "24H" | "ALL";
 };
 
+export type OracleTransparency = {
+  category: string;
+  provider: string;
+  marketType: string;
+  externalId: string | null;
+  settlementRule: string;
+  verificationSource: string;
+  fallbackSource: string | null;
+  settlementProvider?: string | null;
+  settlementPrice?: string | null;
+  settlementObservedAt?: string | null;
+  settlementPayloadHash?: string | null;
+  settlementSummary?: string | null;
+};
+
 export type ActivityType =
   | "buy_yes"
   | "buy_no"
@@ -85,6 +100,8 @@ export type ActivityItem = {
   amount: bigint;
   shares?: bigint;
   outcome?: number;
+  settlementPrice?: bigint;
+  summary?: string | null;
   timestamp: number;
   whale: boolean;
 };

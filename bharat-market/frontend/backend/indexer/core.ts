@@ -21,6 +21,7 @@ import {
   getProbabilities
 } from "@/backend/indexer/math";
 import { chainlinkFunctionsOracleAbi, marketAbi, marketFactoryAbi, outcomeTokenAbi } from "@/lib/abis";
+import { decodeOracleMetadata, summarizeOracleMetadata } from "@/lib/oracle-metadata";
 
 type RequiredAddresses = {
   marketFactory: Address;
@@ -336,6 +337,8 @@ async function upsertIndexedMarket(
         functionName: "name"
       })
     );
+  const decodedOracleMetadata = decodeOracleMetadata(oracleQuery);
+  const oracleTransparency = summarizeOracleMetadata(decodedOracleMetadata);
 
   const market = await prisma.market.upsert({
     where: {
@@ -345,6 +348,13 @@ async function upsertIndexedMarket(
       question: inferredQuestion,
       oracleType,
       oracleQuery,
+      oracleMetadata: decodedOracleMetadata ?? undefined,
+      oracleProvider: oracleTransparency?.provider ?? undefined,
+      oracleMarketType: oracleTransparency?.marketType ?? undefined,
+      oracleExternalId: oracleTransparency?.externalId ?? undefined,
+      settlementRule: oracleTransparency?.settlementRule ?? undefined,
+      verificationSource: oracleTransparency?.verificationSource ?? undefined,
+      fallbackSource: oracleTransparency?.fallbackSource ?? undefined,
       creator: input.creator ?? owner.toLowerCase(),
       endTime: input.endTime ?? new Date(Number(chainEndTime) * 1000),
       createdAt: input.createdAt,
@@ -359,6 +369,13 @@ async function upsertIndexedMarket(
       question: inferredQuestion,
       oracleType,
       oracleQuery,
+      oracleMetadata: decodedOracleMetadata ?? undefined,
+      oracleProvider: oracleTransparency?.provider ?? null,
+      oracleMarketType: oracleTransparency?.marketType ?? null,
+      oracleExternalId: oracleTransparency?.externalId ?? null,
+      settlementRule: oracleTransparency?.settlementRule ?? null,
+      verificationSource: oracleTransparency?.verificationSource ?? null,
+      fallbackSource: oracleTransparency?.fallbackSource ?? null,
       creator: input.creator ?? owner.toLowerCase(),
       createdAt: input.createdAt,
       createdBlock: input.createdBlock,
@@ -445,6 +462,14 @@ async function syncOracleEvents(
                 : "FAILED",
           oracleType: (args.oracleType as string | null | undefined) ?? null,
           oracleQuery: (args.oracleQuery as string | null | undefined) ?? null,
+          provider: (args.provider as string | null | undefined) || market.oracleProvider || null,
+          externalId: (args.externalId as string | null | undefined) || market.oracleExternalId || null,
+          settlementPrice: args.settlementPriceE8 !== undefined ? BigInt(args.settlementPriceE8) : null,
+          observedAt: args.settlementPriceE8 !== undefined ? await getBlockTimestamp(publicClient, log.blockNumber) : null,
+          summary:
+            args.settlementPriceE8 !== undefined
+              ? `${(args.provider as string | undefined) || market.oracleProvider || "oracle"} settlement price ${formatPriceE8(BigInt(args.settlementPriceE8))} USD; outcome ${Number(args.outcome) === 1 ? "YES" : Number(args.outcome) === 2 ? "NO" : "PENDING"}`
+              : null,
           outcome: args.outcome !== undefined ? Number(args.outcome) : null,
           errorData: (args.errorData as string | null | undefined) ?? null,
           txHash: log.transactionHash,
@@ -453,12 +478,76 @@ async function syncOracleEvents(
           timestamp: await getBlockTimestamp(publicClient, log.blockNumber)
         }
       });
+
+      if (log.eventName === "ResolutionFulfilled") {
+        const timestamp = await getBlockTimestamp(publicClient, log.blockNumber);
+        const provider = (args.provider as string | null | undefined) || market.oracleProvider || null;
+        const externalId = (args.externalId as string | null | undefined) || market.oracleExternalId || null;
+        const settlementPrice = args.settlementPriceE8 !== undefined ? BigInt(args.settlementPriceE8) : null;
+        const outcome = args.outcome !== undefined ? Number(args.outcome) : null;
+        const summary =
+          settlementPrice && provider
+            ? `${provider} settlement price ${formatPriceE8(settlementPrice)} USD; outcome ${outcome === 1 ? "YES" : outcome === 2 ? "NO" : "PENDING"}`
+            : null;
+
+        await prisma.market.update({
+          where: { id: market.id },
+          data: {
+            settlementProvider: provider,
+            settlementPrice,
+            settlementObservedAt: settlementPrice ? timestamp : null,
+            settlementSummary: summary,
+            lastActivityAt: timestamp
+          }
+        });
+
+        const existingAudit = await prisma.oracleResolutionAudit.findFirst({
+          where: {
+            marketId: market.id,
+            fulfillmentTxHash: log.transactionHash
+          }
+        });
+
+        if (!existingAudit) {
+          await prisma.oracleResolutionAudit.create({
+            data: {
+              marketId: market.id,
+              provider: provider || "unknown",
+              marketType: market.oracleMarketType || "unknown",
+              externalId,
+              settlementRule: market.settlementRule || "Oracle settlement",
+              verificationSource: market.verificationSource || "Chainlink Functions",
+              fallbackSource: market.fallbackSource,
+              status: "FULFILLED",
+              normalizedOutcome: outcome,
+              settlementPrice,
+              payloadPreview: settlementPrice
+                ? {
+                    settlementPriceE8: settlementPrice.toString(),
+                    settlementPriceUsd: formatPriceE8(settlementPrice)
+                  }
+                : undefined,
+              fulfillmentTxHash: log.transactionHash,
+              chainlinkRequestId: (args.requestId as string | null | undefined) ?? null,
+              requestedAt: timestamp,
+              completedAt: timestamp
+            }
+          });
+        }
+      }
     }
 
     await setCursorBlock(prisma, cursorName, toBlock);
     console.log(`[indexer] ${cursorName} -> ${toBlock.toString()}`);
     fromBlock = toBlock + 1n;
   }
+}
+
+function formatPriceE8(value: bigint) {
+  const whole = value / 100_000_000n;
+  const fraction = value % 100_000_000n;
+  const trimmedFraction = fraction.toString().padStart(8, "0").replace(/0+$/, "");
+  return trimmedFraction ? `${whole.toString()}.${trimmedFraction}` : whole.toString();
 }
 
 async function syncMarketEvents(

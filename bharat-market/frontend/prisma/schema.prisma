@@ -40,6 +40,18 @@ model Market {
   question            String
   oracleType          String
   oracleQuery         String
+  oracleMetadata      Json?
+  oracleProvider      String?
+  oracleMarketType    String?
+  oracleExternalId    String?
+  settlementRule      String?
+  verificationSource  String?
+  fallbackSource      String?
+  settlementProvider  String?
+  settlementPrice     BigInt?
+  settlementObservedAt DateTime?
+  settlementPayloadHash String?
+  settlementSummary   String?
   creator             String?
   createdAt           DateTime
   createdBlock        BigInt
@@ -66,9 +78,12 @@ model Market {
   liquidityPositions  WalletLiquidityPosition[]
   participants        MarketParticipant[]
   oracleEvents        OracleEvent[]
+  oracleAuditTrail    OracleResolutionAudit[]
 
   @@index([resolved, endTime])
   @@index([lastActivityAt])
+  @@index([oracleProvider, oracleMarketType])
+  @@index([oracleExternalId])
 }
 
 model Trade {
@@ -206,6 +221,12 @@ model OracleEvent {
   type        OracleEventType
   oracleType  String?
   oracleQuery String?
+  provider    String?
+  externalId  String?
+  settlementPrice BigInt?
+  observedAt  DateTime?
+  payloadHash String?
+  summary     String?
   outcome     Int?
   errorData   String?
   txHash      String
@@ -215,6 +236,32 @@ model OracleEvent {
 
   @@index([marketId, timestamp(sort: Desc)])
   @@index([requestId])
+}
+
+model OracleResolutionAudit {
+  id              String   @id @default(cuid())
+  marketId        String
+  market          Market   @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  provider        String
+  marketType      String
+  externalId      String?
+  settlementRule  String
+  verificationSource String
+  fallbackSource  String?
+  status          String
+  normalizedOutcome Int?
+  payloadHash     String?
+  payloadPreview  Json?
+  settlementPrice BigInt?
+  error           String?
+  requestTxHash   String?
+  fulfillmentTxHash String?
+  chainlinkRequestId String?
+  requestedAt     DateTime @default(now())
+  completedAt     DateTime?
+
+  @@index([marketId, requestedAt(sort: Desc)])
+  @@index([status, requestedAt(sort: Desc)])
 }
 
 model IndexerCursor {

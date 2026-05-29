@@ -51,6 +51,7 @@ export const mockUsdcAbi = parseAbi([
 export const chainlinkFunctionsOracleAbi = parseAbi([
   "event ResolutionRequested(bytes32 indexed requestId, address indexed market, string oracleType, string oracleQuery)",
   "event ResolutionFulfilled(bytes32 indexed requestId, address indexed market, uint8 outcome)",
+  "event ResolutionFulfilled(bytes32 indexed requestId, address indexed market, uint8 outcome, uint256 settlementPriceE8, string provider, string externalId)",
   "event ResolutionFailed(bytes32 indexed requestId, address indexed market, bytes errorData)",
   "function requestMarketResolution(address market) returns (bytes32)",
   "function marketPendingRequest(address) view returns (bytes32)"

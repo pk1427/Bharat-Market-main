@@ -7,6 +7,6 @@
   "MockUSDC": null,
   "FeeVault": "0x13aB65b9c696C6960781D1321AEe211844e5e18a",
   "MarketOracle": "0xa54f243B4d77aB0C343874D8ea44D6a5ad29E460",
-  "ChainlinkFunctionsOracle": "0x63D13d12fA9aB7dC9B04812498610f5670f5Bab0",
+  "ChainlinkFunctionsOracle": "0x37AeB023a2f9Dd980aaD3B89649bF971A2Eadd6D",
   "MarketFactory": "0x5f69D163122cda1C1e2305925D143dcD93F406Cd"
 }

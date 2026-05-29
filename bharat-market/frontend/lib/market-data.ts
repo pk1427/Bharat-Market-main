@@ -2,7 +2,14 @@ import type { Address, PublicClient } from "viem";
 import { erc20Abi } from "viem";
 
 import { marketAbi, marketFactoryAbi, outcomeTokenAbi } from "@/lib/abis";
-import { getCategoryLabel, getOracleSourceLabel } from "@/lib/market-meta";
+import { getCategoryLabel } from "@/lib/market-meta";
+import {
+  decodeOracleMetadata,
+  getOracleProviderLabel,
+  summarizeOracleMetadata,
+  type OracleMetadata
+} from "@/lib/oracle-metadata";
+import type { OracleTransparency } from "@/types/product";
 
 export type MarketStatus = "active" | "awaiting" | "resolved";
 
@@ -14,6 +21,7 @@ export type MarketSummary = {
   oracleSource: string;
   oracleType: string;
   oracleQuery: string;
+  oracleMetadata: OracleTransparency | null;
   yesProbability: bigint;
   noProbability: bigint;
   liquidity: bigint;
@@ -166,6 +174,7 @@ export async function fetchMarketSummaries(
 
       const created = creationMap.get(marketAddress.toLowerCase());
       const status = getMarketStatus(resolved, endTime);
+      const oracleMetadata = decodeOracleMetadata(oracleQuery);
       const question =
         created?.question ?? deriveQuestion(oracleType, oracleQuery, marketAddress);
 
@@ -174,9 +183,10 @@ export async function fetchMarketSummaries(
         creator: created?.creator ?? null,
         question,
         category: getCategoryLabel(oracleType, oracleQuery),
-        oracleSource: getOracleSourceLabel(oracleType),
+        oracleSource: getOracleProviderLabel(oracleMetadata, oracleType),
         oracleType,
         oracleQuery,
+        oracleMetadata: summarizeOracleMetadata(oracleMetadata),
         yesProbability,
         noProbability,
         liquidity: yesPool + noPool,
@@ -321,6 +331,7 @@ export async function fetchMarketDetail(
     : [0n, 0n, 0n, 0n];
 
   const status = getMarketStatus(resolved, endTime);
+  const oracleMetadata = decodeOracleMetadata(oracleQuery);
   const question = created?.question ?? deriveQuestion(oracleType, oracleQuery, marketAddress);
 
   return {
@@ -328,9 +339,10 @@ export async function fetchMarketDetail(
     creator: created?.creator ?? null,
     question,
     category: getCategoryLabel(oracleType, oracleQuery),
-    oracleSource: getOracleSourceLabel(oracleType),
+    oracleSource: getOracleProviderLabel(oracleMetadata, oracleType),
     oracleType,
     oracleQuery,
+    oracleMetadata: summarizeOracleMetadata(oracleMetadata),
     yesProbability,
     noProbability,
     liquidity: yesPool + noPool,
@@ -577,6 +589,11 @@ function getEndTimeLabel(endTime: bigint) {
 }
 
 function deriveQuestion(oracleType: string, oracleQuery: string, marketAddress: Address) {
+  const metadata = decodeOracleMetadata(oracleQuery);
+  if (metadata) {
+    return deriveStructuredQuestion(metadata);
+  }
+
   if (oracleType === "sports" && oracleQuery.includes("_vs_")) {
     const [home, away] = oracleQuery.split("_vs_");
     return `Will ${formatTeam(home)} beat ${formatTeam(away)}?`;
@@ -595,6 +612,20 @@ function deriveQuestion(oracleType: string, oracleQuery: string, marketAddress: 
   }
 
   return `Market ${marketAddress.slice(0, 8)}`;
+}
+
+function deriveStructuredQuestion(metadata: OracleMetadata) {
+  if (metadata.category === "crypto") {
+    const direction = metadata.marketType.includes("above") ? "above" : "below";
+    return `Will ${metadata.asset} be ${direction} $${metadata.targetPrice.toLocaleString("en-US")} at settlement?`;
+  }
+
+  if (metadata.category === "cricket") {
+    const opponent = metadata.selectedTeam === metadata.teamA ? metadata.teamB : metadata.teamA;
+    return `Will ${metadata.selectedTeam} beat ${opponent}?`;
+  }
+
+  return `Will ${metadata.candidate} win ${metadata.region ? `${metadata.region} ` : ""}${metadata.electionType || "the election"}?`;
 }
 
 function formatTeam(team: string) {

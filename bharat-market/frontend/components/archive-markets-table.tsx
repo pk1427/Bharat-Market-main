@@ -133,7 +133,9 @@ export function ArchiveMarketsTable() {
                   <ArchiveCell>
                     <div>
                       <p className="font-medium text-white">{market.question}</p>
-                      <p className="mt-1 text-xs text-slate-500">{market.oracleQuery}</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {market.oracleMetadata?.externalId ?? market.oracleQuery}
+                      </p>
                     </div>
                   </ArchiveCell>
                   <ArchiveCell>{formatUsdcCompact(market.liquidity)}</ArchiveCell>

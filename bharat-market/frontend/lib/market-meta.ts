@@ -1,4 +1,11 @@
+import { decodeOracleMetadata } from "@/lib/oracle-metadata";
+
 export function getCategoryLabel(oracleType: string, oracleQuery: string) {
+  const metadata = decodeOracleMetadata(oracleQuery);
+  if (metadata?.category === "cricket") return "Cricket";
+  if (metadata?.category === "crypto") return "Crypto";
+  if (metadata?.category === "election") return "Governance";
+
   if (oracleType === "sports") {
     if (oracleQuery.includes("ipl") || oracleQuery.includes("_vs_")) {
       return "Cricket";

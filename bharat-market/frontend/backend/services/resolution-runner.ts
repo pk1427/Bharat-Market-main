@@ -1,0 +1,178 @@
+import { getAddress, type Address, createWalletClient, http } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import { polygonAmoy } from "viem/chains";
+
+import { getPrismaClient } from "@/backend/db/client";
+import { getIndexerPublicClient } from "@/backend/indexer/client";
+import { evaluateOracleMetadata } from "@/backend/oracles/registry";
+import { chainlinkFunctionsOracleAbi } from "@/lib/abis";
+import { getRequiredAddresses } from "@/lib/contracts";
+import { decodeOracleMetadata } from "@/lib/oracle-metadata";
+
+const MAX_MARKETS_PER_RUN = 5;
+
+export async function runResolutionSync(reason: "manual" | "cron" | "loop" = "manual") {
+  const prisma = getPrismaClient();
+  const addresses = getRequiredAddresses();
+  const workerKey = normalizePrivateKey(process.env.RESOLUTION_WORKER_PRIVATE_KEY || process.env.PRIVATE_KEY);
+
+  if (!prisma) {
+    throw new Error("DATABASE_URL is missing. Configure PostgreSQL before running the resolution worker.");
+  }
+
+  if (!addresses?.chainlinkOracle) {
+    throw new Error("NEXT_PUBLIC_CHAINLINK_ORACLE_ADDRESS is missing.");
+  }
+
+  const markets = await prisma.market.findMany({
+    where: {
+      resolved: false,
+      endTime: {
+        lte: new Date()
+      },
+      OR: [
+        {
+          oracleProvider: "coingecko"
+        },
+        {
+          oracleType: "crypto"
+        }
+      ]
+    },
+    orderBy: {
+      endTime: "asc"
+    },
+    take: MAX_MARKETS_PER_RUN
+  });
+
+  const publicClient = getIndexerPublicClient();
+  const walletClient =
+    workerKey && addresses.chainlinkOracle
+      ? createWalletClient({
+          account: privateKeyToAccount(workerKey),
+          chain: polygonAmoy,
+          transport: http(process.env.INDEXER_RPC_URL || process.env.NEXT_PUBLIC_AMOY_RPC_URL)
+        })
+      : null;
+
+  const results = [];
+
+  for (const market of markets) {
+    const metadata = decodeOracleMetadata(market.oracleQuery);
+    if (!metadata || metadata.category !== "crypto" || metadata.provider !== "coingecko") {
+      results.push({
+        market: market.marketAddress,
+        status: "skipped",
+        reason: "Not a CoinGecko crypto market."
+      });
+      continue;
+    }
+
+    const pendingRequest = await publicClient.readContract({
+      address: addresses.chainlinkOracle,
+      abi: chainlinkFunctionsOracleAbi,
+      functionName: "marketPendingRequest",
+      args: [getAddress(market.marketAddress)]
+    });
+
+    if (pendingRequest !== "0x0000000000000000000000000000000000000000000000000000000000000000") {
+      results.push({
+        market: market.marketAddress,
+        status: "pending",
+        requestId: pendingRequest
+      });
+      continue;
+    }
+
+    try {
+      const preview = await evaluateOracleMetadata(metadata);
+      const audit = await prisma.oracleResolutionAudit.create({
+        data: {
+          marketId: market.id,
+          provider: preview.provider,
+          marketType: metadata.marketType,
+          externalId: preview.externalId,
+          settlementRule: metadata.settlementRule,
+          verificationSource: metadata.verificationSource,
+          fallbackSource: metadata.fallbackSource,
+          status: walletClient ? "READY" : "READY_NO_WORKER_KEY",
+          normalizedOutcome: preview.outcome,
+          payloadHash: preview.payloadHash,
+          payloadPreview: preview.payloadPreview as object,
+          settlementPrice: preview.settlementPrice === null ? null : BigInt(Math.round(preview.settlementPrice * 100_000_000)),
+          requestedAt: new Date(preview.observedAt)
+        }
+      });
+
+      if (!walletClient) {
+        results.push({
+          market: market.marketAddress,
+          status: "ready",
+          auditId: audit.id,
+          reason: "Set RESOLUTION_WORKER_PRIVATE_KEY to submit Chainlink resolution requests automatically."
+        });
+        continue;
+      }
+
+      const hash = await walletClient.writeContract({
+        address: addresses.chainlinkOracle,
+        abi: chainlinkFunctionsOracleAbi,
+        functionName: "requestMarketResolution",
+        args: [getAddress(market.marketAddress)]
+      });
+
+      await prisma.oracleResolutionAudit.update({
+        where: {
+          id: audit.id
+        },
+        data: {
+          status: "REQUESTED",
+          requestTxHash: hash
+        }
+      });
+
+      results.push({
+        market: market.marketAddress,
+        status: "requested",
+        txHash: hash
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown CoinGecko resolution error.";
+      await prisma.oracleResolutionAudit.create({
+        data: {
+          marketId: market.id,
+          provider: "coingecko",
+          marketType: metadata.marketType,
+          externalId: metadata.externalId,
+          settlementRule: metadata.settlementRule,
+          verificationSource: metadata.verificationSource,
+          fallbackSource: metadata.fallbackSource,
+          status: "FAILED_PRECHECK",
+          error: message
+        }
+      });
+
+      results.push({
+        market: market.marketAddress,
+        status: "failed_precheck",
+        error: message
+      });
+    }
+  }
+
+  return {
+    status: "resolution_checked" as const,
+    reason,
+    checked: markets.length,
+    results
+  };
+}
+
+function normalizePrivateKey(value: string | undefined): `0x${string}` | null {
+  if (!value) {
+    return null;
+  }
+
+  const normalized = value.startsWith("0x") ? value : `0x${value}`;
+  return /^0x[0-9a-fA-F]{64}$/.test(normalized) ? (normalized as `0x${string}`) : null;
+}

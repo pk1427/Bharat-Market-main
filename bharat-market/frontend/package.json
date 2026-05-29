@@ -6,12 +6,14 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "postinstall": "prisma generate",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "indexer:markets": "tsx backend/workers/index-markets.ts",
     "indexer:market": "tsx backend/workers/index-market.ts",
-    "indexer:loop": "tsx backend/workers/index-loop.ts"
+    "indexer:loop": "tsx backend/workers/index-loop.ts",
+    "resolution:loop": "tsx backend/workers/resolution-loop.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.9.0",

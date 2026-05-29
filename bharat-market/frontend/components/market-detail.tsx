@@ -289,7 +289,12 @@ export function MarketDetail({ address }: { address: string }) {
 
           <div className="border-t border-white/6 bg-black/15 px-6 py-7 sm:px-8 xl:border-l xl:border-t-0">
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
-              <MetricPanel icon={Waves} label="Oracle Route" value={market.oracleType} helper={market.oracleQuery} />
+              <MetricPanel
+                icon={Waves}
+                label="Oracle Route"
+                value={market.oracleType}
+                helper={market.oracleMetadata?.externalId ?? market.oracleQuery}
+              />
               <MetricPanel icon={ShieldCheck} label="Oracle Source" value={market.oracleSource} helper="Resolution provider for this contract" />
               <MetricPanel icon={Users} label="Participants" value={String(market.traderCount)} helper="Unique wallets that executed buys" />
               <MetricPanel icon={Clock3} label="Expiry" value={formatTimestamp(market.endTime)} helper={market.endTimeLabel} />
@@ -305,6 +310,30 @@ export function MarketDetail({ address }: { address: string }) {
           </p>
         ) : null}
       </Panel>
+
+      {market.oracleMetadata ? (
+        <Panel className="grid gap-5 p-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.28em] text-mint">Oracle Transparency</p>
+            <h2 className="mt-3 font-heading text-3xl uppercase text-white">
+              Resolved via {market.oracleSource}
+            </h2>
+            <p className="mt-3 text-sm leading-7 text-slate-300">
+              {market.oracleMetadata.settlementRule}
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <DataRow label="Provider" value={market.oracleMetadata.provider} />
+            <DataRow label="Market Type" value={market.oracleMetadata.marketType} />
+            <DataRow label="External ID" value={market.oracleMetadata.externalId ?? "--"} />
+            <DataRow label="Verification Source" value={market.oracleMetadata.verificationSource} />
+            <DataRow label="Fallback Source" value={market.oracleMetadata.fallbackSource ?? "--"} />
+            <DataRow label="Settlement Price" value={formatSettlementPrice(market.oracleMetadata.settlementPrice)} />
+            <DataRow label="Observed At" value={formatSettlementObservedAt(market.oracleMetadata.settlementObservedAt)} />
+            <DataRow label="Settlement Summary" value={market.oracleMetadata.settlementSummary ?? "Awaiting oracle fulfillment"} />
+          </div>
+        </Panel>
+      ) : null}
 
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1.65fr)_minmax(355px,0.75fr)] xl:items-start">
         <div className="space-y-6">
@@ -458,6 +487,31 @@ function DataRow({ label, value }: { label: string; value: string }) {
       <p className="mt-3 text-lg font-semibold text-white">{value}</p>
     </div>
   );
+}
+
+function formatSettlementPrice(value?: string | null) {
+  if (!value) {
+    return "Awaiting fulfillment";
+  }
+
+  const raw = BigInt(value);
+  const whole = raw / 100_000_000n;
+  const fraction = raw % 100_000_000n;
+  const trimmedFraction = fraction.toString().padStart(8, "0").replace(/0+$/, "");
+  return `$${trimmedFraction ? `${whole.toString()}.${trimmedFraction}` : whole.toString()}`;
+}
+
+function formatSettlementObservedAt(value?: string | null) {
+  if (!value) {
+    return "Awaiting fulfillment";
+  }
+
+  return new Date(value).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  });
 }
 
 function MetricPanel({

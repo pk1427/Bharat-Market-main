@@ -7,7 +7,7 @@ import type { ApiMeta } from "@/types/product";
 import type { ActivityItem } from "@/types/product";
 
 type ActivityPayload = {
-  items: Array<Omit<ActivityItem, "amount" | "shares"> & { amount: string; shares?: string }>;
+  items: Array<Omit<ActivityItem, "amount" | "shares" | "settlementPrice"> & { amount: string; shares?: string; settlementPrice?: string }>;
   meta?: ApiMeta;
 };
 
@@ -26,7 +26,8 @@ export function useActivityFeed(marketAddress: string) {
         items: payload.items.map((item) => ({
           ...item,
           amount: BigInt(item.amount),
-          shares: item.shares ? BigInt(item.shares) : undefined
+          shares: item.shares ? BigInt(item.shares) : undefined,
+          settlementPrice: item.settlementPrice ? BigInt(item.settlementPrice) : undefined
         })),
         meta: payload.meta ?? null
       };

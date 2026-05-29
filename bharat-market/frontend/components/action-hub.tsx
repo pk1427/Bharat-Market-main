@@ -14,6 +14,13 @@ import { collateralConfig } from "@/lib/collateral";
 import { getRequiredAddresses } from "@/lib/contracts";
 import { getSafeFeeOverrides } from "@/lib/fees";
 import { formatTxError, formatUsdc } from "@/lib/format";
+import {
+  buildOracleQuestion,
+  encodeOracleMetadata,
+  normalizeOracleMetadata,
+  type OracleMetadata,
+  type OracleCategory
+} from "@/lib/oracle-metadata";
 import { failTxToast, handleTxToast, settleTxToast } from "@/lib/tx-toasts";
 
 export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void }) {
@@ -22,8 +29,20 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
   const addresses = getRequiredAddresses();
   const [createForm, setCreateForm] = useState({
     question: "",
-    oracleType: "sports",
-    oracleQuery: "",
+    category: "cricket" as OracleCategory,
+    cryptoAsset: "ETH",
+    cryptoTargetPrice: "5000",
+    cryptoDirection: "price_above",
+    cricketProvider: "cricapi",
+    cricketMatchId: "mi_vs_kkr",
+    cricketLeague: "IPL",
+    cricketTeamA: "MI",
+    cricketTeamB: "KKR",
+    cricketSelectedTeam: "MI",
+    electionId: "",
+    electionCandidate: "",
+    electionRegion: "",
+    electionType: "winner",
     durationMinutes: "180"
   });
   const [mintHash, setMintHash] = useState<`0x${string}` | undefined>();
@@ -63,6 +82,57 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
   const requiredFee = creationFee ?? parseUnits("10", 6);
   const hasEnoughUsdc = (usdcBalance ?? 0n) >= requiredFee;
   const hasCreationApproval = (creationAllowance ?? 0n) >= requiredFee;
+  const settlementTimestamp = useMemo(() => {
+    const minutes = Number(createForm.durationMinutes || "0");
+    return Math.floor(Date.now() / 1000) + Math.max(Number.isFinite(minutes) ? minutes : 0, 1) * 60;
+  }, [createForm.durationMinutes]);
+  const oracleMetadata = useMemo(() => {
+    if (createForm.category === "crypto") {
+      return normalizeOracleMetadata({
+        category: "crypto",
+        provider: "coingecko",
+        asset: createForm.cryptoAsset,
+        marketType: createForm.cryptoDirection,
+        targetPrice: Number(createForm.cryptoTargetPrice),
+        settlementTimestamp,
+        externalId: createForm.cryptoAsset.toLowerCase(),
+        verificationSource: "CoinGecko market chart range endpoint"
+      });
+    }
+
+    if (createForm.category === "cricket") {
+      return normalizeOracleMetadata({
+        category: "cricket",
+        provider: createForm.cricketProvider,
+        matchId: createForm.cricketMatchId,
+        league: createForm.cricketLeague,
+        teamA: createForm.cricketTeamA,
+        teamB: createForm.cricketTeamB,
+        selectedTeam: createForm.cricketSelectedTeam,
+        verificationSource: "Cricket score provider match result",
+        fallbackSource: "Secondary sports score provider"
+      });
+    }
+
+    return normalizeOracleMetadata({
+      category: "election",
+      provider: "staging",
+      electionId: createForm.electionId,
+      candidate: createForm.electionCandidate,
+      region: createForm.electionRegion,
+      electionType: createForm.electionType,
+      verificationSource: "Verified election results source",
+      fallbackSource: "Secondary certified result source"
+    });
+  }, [createForm, settlementTimestamp]);
+  const encodedOracleQuery = oracleMetadata ? encodeOracleMetadata(oracleMetadata) : "";
+  const structuredOracleCreationEnabled = process.env.NEXT_PUBLIC_STRUCTURED_ORACLES_ENABLED === "true";
+  const legacyOracleQuery = oracleMetadata ? buildLegacyOracleQuery(oracleMetadata) : "";
+  const contractOracleQuery = structuredOracleCreationEnabled ? encodedOracleQuery : legacyOracleQuery;
+  const contractOracleType =
+    createForm.category === "cricket" ? "sports" : createForm.category;
+  const generatedQuestion = oracleMetadata ? buildOracleQuestion(oracleMetadata) : "";
+  const questionToCreate = createForm.question.trim() || generatedQuestion;
 
   useEffect(() => {
     let cancelled = false;
@@ -170,11 +240,11 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
 
     try {
       setError(null);
-      if (!createForm.question.trim()) {
+      if (!questionToCreate.trim()) {
         throw new Error("Add a market question before creating the contract.");
       }
-      if (!createForm.oracleQuery.trim()) {
-        throw new Error("Add an oracle query so BharatMarket can resolve the market.");
+      if (!oracleMetadata || !contractOracleQuery) {
+        throw new Error("Complete the structured oracle metadata before creating the market.");
       }
       if (!hasEnoughUsdc) {
         throw new Error(`You need at least ${formatUsdc(requiredFee)} to pay the creation fee.`);
@@ -190,7 +260,7 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
           address: addresses.marketFactory,
           abi: marketFactoryAbi,
           functionName: "createMarket",
-          args: [createForm.question, endTime, createForm.oracleType, createForm.oracleQuery],
+          args: [questionToCreate, endTime, contractOracleType, contractOracleQuery],
           account: address
         })
         .then((value) => (value * 12n) / 10n)
@@ -203,7 +273,7 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
         address: addresses.marketFactory,
         abi: marketFactoryAbi,
         functionName: "createMarket",
-        args: [createForm.question, endTime, createForm.oracleType, createForm.oracleQuery],
+        args: [questionToCreate, endTime, contractOracleType, contractOracleQuery],
         gas,
         ...fees
       });
@@ -255,8 +325,20 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
       onMarketCreated?.();
       setCreateForm({
         question: "",
-        oracleType: "sports",
-        oracleQuery: "",
+        category: "cricket",
+        cryptoAsset: "BTC",
+        cryptoTargetPrice: "100000",
+        cryptoDirection: "price_above",
+        cricketProvider: "cricapi",
+        cricketMatchId: "mi_vs_kkr",
+        cricketLeague: "IPL",
+        cricketTeamA: "MI",
+        cricketTeamB: "KKR",
+        cricketSelectedTeam: "MI",
+        electionId: "",
+        electionCandidate: "",
+        electionRegion: "",
+        electionType: "winner",
         durationMinutes: "180"
       });
       if (createHash && createToastId !== null) {
@@ -293,7 +375,7 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
             </h2>
             <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-400">
               Configure the market question, oracle route, and expiry window with cleaner
-              creator controls built for BharatMarket’s live sports contracts.
+              creator controls built for provider-backed markets and Chainlink Functions settlement.
             </p>
           </div>
 
@@ -316,7 +398,7 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
             <input
               value={createForm.question}
               onChange={(event) => setCreateForm((current) => ({ ...current, question: event.target.value }))}
-              placeholder="Will Mumbai Indians beat KKR today?"
+              placeholder={generatedQuestion || "Will Mumbai Indians beat KKR today?"}
               className="w-full rounded-[16px] border border-white/10 bg-slate-950/60 px-4 py-4 text-base text-white outline-none transition placeholder:text-slate-600 focus:border-violet-400/35"
             />
             <p className="text-xs text-slate-500">
@@ -327,31 +409,68 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
           <div className="grid gap-4 md:grid-cols-[0.85fr_1.15fr]">
             <div className="grid gap-2">
               <label className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
-                Oracle Type
+                Market Category
               </label>
               <select
-                value={createForm.oracleType}
-                onChange={(event) => setCreateForm((current) => ({ ...current, oracleType: event.target.value }))}
+                value={createForm.category}
+                onChange={(event) => setCreateForm((current) => ({ ...current, category: event.target.value as OracleCategory }))}
                 className="w-full rounded-[16px] border border-white/10 bg-slate-950/60 px-4 py-4 text-base text-white outline-none transition focus:border-violet-400/35"
               >
-                <option value="sports">sports</option>
                 <option value="crypto">crypto</option>
+                <option value="cricket">cricket</option>
                 <option value="election">election</option>
               </select>
             </div>
 
             <div className="grid gap-2">
               <label className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
-                Oracle Query
+                Provider
               </label>
               <input
-                value={createForm.oracleQuery}
-                onChange={(event) => setCreateForm((current) => ({ ...current, oracleQuery: event.target.value }))}
-                placeholder="mi_vs_kkr"
+                value={oracleMetadata?.provider ?? ""}
+                readOnly
+                placeholder="coingecko"
                 className="w-full rounded-[16px] border border-white/10 bg-slate-950/60 px-4 py-4 text-base text-white outline-none transition placeholder:text-slate-600 focus:border-violet-400/35"
               />
             </div>
           </div>
+
+          {createForm.category === "crypto" ? (
+            <div className="grid gap-4 md:grid-cols-3">
+              <Field label="Asset" value={createForm.cryptoAsset} onChange={(value) => setCreateForm((current) => ({ ...current, cryptoAsset: value.toUpperCase() }))} placeholder="BTC" />
+              <Field label="Target Price" value={createForm.cryptoTargetPrice} onChange={(value) => setCreateForm((current) => ({ ...current, cryptoTargetPrice: value }))} placeholder="100000" />
+              <div className="grid gap-2">
+                <label className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Direction</label>
+                <select
+                  value={createForm.cryptoDirection}
+                  onChange={(event) => setCreateForm((current) => ({ ...current, cryptoDirection: event.target.value }))}
+                  className="w-full rounded-[16px] border border-white/10 bg-slate-950/60 px-4 py-4 text-base text-white outline-none transition focus:border-violet-400/35"
+                >
+                  <option value="price_above">above</option>
+                  <option value="price_below">below</option>
+                </select>
+              </div>
+            </div>
+          ) : null}
+
+          {createForm.category === "cricket" ? (
+            <div className="grid gap-4 md:grid-cols-3">
+              <Field label="Fixture ID" value={createForm.cricketMatchId} onChange={(value) => setCreateForm((current) => ({ ...current, cricketMatchId: value }))} placeholder="ipl_2026_42" />
+              <Field label="Team A" value={createForm.cricketTeamA} onChange={(value) => setCreateForm((current) => ({ ...current, cricketTeamA: value.toUpperCase(), cricketSelectedTeam: current.cricketSelectedTeam || value.toUpperCase() }))} placeholder="MI" />
+              <Field label="Team B" value={createForm.cricketTeamB} onChange={(value) => setCreateForm((current) => ({ ...current, cricketTeamB: value.toUpperCase() }))} placeholder="KKR" />
+              <Field label="League" value={createForm.cricketLeague} onChange={(value) => setCreateForm((current) => ({ ...current, cricketLeague: value }))} placeholder="IPL" />
+              <Field label="YES Team" value={createForm.cricketSelectedTeam} onChange={(value) => setCreateForm((current) => ({ ...current, cricketSelectedTeam: value.toUpperCase() }))} placeholder="MI" />
+            </div>
+          ) : null}
+
+          {createForm.category === "election" ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label="Election ID" value={createForm.electionId} onChange={(value) => setCreateForm((current) => ({ ...current, electionId: value }))} placeholder="india_pm_2029" />
+              <Field label="Candidate / Party" value={createForm.electionCandidate} onChange={(value) => setCreateForm((current) => ({ ...current, electionCandidate: value }))} placeholder="Candidate name" />
+              <Field label="Region" value={createForm.electionRegion} onChange={(value) => setCreateForm((current) => ({ ...current, electionRegion: value }))} placeholder="India" />
+              <Field label="Election Type" value={createForm.electionType} onChange={(value) => setCreateForm((current) => ({ ...current, electionType: value }))} placeholder="winner" />
+            </div>
+          ) : null}
 
           <div className="grid gap-4 md:grid-cols-[0.8fr_1.2fr]">
             <div className="grid gap-2">
@@ -377,9 +496,15 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
                   type="button"
                   onClick={() =>
                     setCreateForm({
-                      question: "Will Mumbai Indians beat KKR today?",
-                      oracleType: "sports",
-                      oracleQuery: "mi_vs_kkr",
+                      ...createForm,
+                      question: "",
+                      category: "cricket",
+                      cricketProvider: "cricapi",
+                      cricketMatchId: "mi_vs_kkr",
+                      cricketLeague: "IPL",
+                      cricketTeamA: "MI",
+                      cricketTeamB: "KKR",
+                      cricketSelectedTeam: "MI",
                       durationMinutes: "180"
                     })
                   }
@@ -391,23 +516,38 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
                   type="button"
                   onClick={() =>
                     setCreateForm({
-                      question: "Will BTC break the target price this week?",
-                      oracleType: "crypto",
-                      oracleQuery: "btc_price",
+                      ...createForm,
+                      question: "",
+                      category: "crypto",
+                      cryptoAsset: "ETH",
+                      cryptoTargetPrice: "5000",
+                      cryptoDirection: "price_above",
                       durationMinutes: "10080"
                     })
                   }
                   className="rounded-[12px] border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-300 transition hover:border-white/20 hover:text-white"
                 >
-                  Crypto Price
+                  ETH Above $5000
                 </button>
                 <button
                   type="button"
                   onClick={() =>
                     setCreateForm({
                       question: "",
-                      oracleType: "sports",
-                      oracleQuery: "",
+                      category: "cricket",
+                      cryptoAsset: "ETH",
+                      cryptoTargetPrice: "5000",
+                      cryptoDirection: "price_above",
+                      cricketProvider: "cricapi",
+                      cricketMatchId: "",
+                      cricketLeague: "",
+                      cricketTeamA: "",
+                      cricketTeamB: "",
+                      cricketSelectedTeam: "",
+                      electionId: "",
+                      electionCandidate: "",
+                      electionRegion: "",
+                      electionType: "winner",
                       durationMinutes: "180"
                     })
                   }
@@ -433,7 +573,7 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
                 <p className="text-[10px] uppercase tracking-[0.16em]">Oracle Route</p>
               </div>
               <p className="mt-3 text-sm text-white">
-                {createForm.oracleType || "No type selected"} / {createForm.oracleQuery || "No query yet"}
+                {contractOracleType} / {oracleMetadata?.marketType ?? "No rule yet"}
               </p>
             </div>
           </div>
@@ -478,7 +618,7 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
             <div className="rounded-[16px] border border-white/8 bg-white/[0.03] p-4">
               <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Question</p>
               <p className="mt-3 text-lg font-semibold text-white">
-                {createForm.question.trim() || "Your market question will appear here"}
+                {questionToCreate || "Your market question will appear here"}
               </p>
             </div>
 
@@ -489,8 +629,21 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
                 value={walletLoading ? "Syncing" : walletError ? "Unavailable" : formatUsdc(usdcBalance ?? 0n)}
               />
               <PreviewMetric icon={Coins} label="Creation Fee" value={formatUsdc(requiredFee)} />
-              <PreviewMetric icon={Sparkles} label="Oracle Type" value={createForm.oracleType || "--"} />
+              <PreviewMetric icon={Sparkles} label="Oracle Type" value={contractOracleType || "--"} />
               <PreviewMetric icon={TimerReset} label="Expiry Window" value={durationLabel} />
+            </div>
+
+            <div className="rounded-[16px] border border-mint/15 bg-mint/[0.05] p-4 text-sm text-slate-300">
+              <p className="text-[10px] uppercase tracking-[0.16em] text-mint">Oracle Metadata</p>
+              <p className="mt-3 text-white">{oracleMetadata?.settlementRule ?? "Complete the structured metadata to generate a deterministic settlement rule."}</p>
+              <p className="mt-2 text-xs text-slate-500">
+                Source: {oracleMetadata?.verificationSource ?? "--"}
+              </p>
+              <p className="mt-2 break-all font-mono text-[11px] text-slate-500">
+                {structuredOracleCreationEnabled
+                  ? encodedOracleQuery || "Encoded oracle query will appear here."
+                  : `Legacy-compatible query: ${contractOracleQuery || "--"}`}
+              </p>
             </div>
 
             <div className="rounded-[16px] border border-white/8 bg-white/[0.03] p-4 text-sm text-slate-300">
@@ -554,6 +707,44 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
       </div>
     </section>
   );
+}
+
+function Field({
+  label,
+  value,
+  onChange,
+  placeholder
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+}) {
+  return (
+    <div className="grid gap-2">
+      <label className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
+        {label}
+      </label>
+      <input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className="w-full rounded-[16px] border border-white/10 bg-slate-950/60 px-4 py-4 text-base text-white outline-none transition placeholder:text-slate-600 focus:border-violet-400/35"
+      />
+    </div>
+  );
+}
+
+function buildLegacyOracleQuery(metadata: OracleMetadata) {
+  if (metadata.category === "crypto") {
+    return `${metadata.asset.toLowerCase()}_price`;
+  }
+
+  if (metadata.category === "cricket") {
+    return `${metadata.teamA.toLowerCase()}_vs_${metadata.teamB.toLowerCase()}`;
+  }
+
+  return metadata.electionId;
 }
 
 function PreviewMetric({
