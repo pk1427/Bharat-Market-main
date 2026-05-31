@@ -5,11 +5,12 @@ import { polygonAmoy } from "viem/chains";
 import { getPrismaClient } from "@/backend/db/client";
 import { getIndexerPublicClient } from "@/backend/indexer/client";
 import { evaluateOracleMetadata } from "@/backend/oracles/registry";
-import { chainlinkFunctionsOracleAbi } from "@/lib/abis";
+import { chainlinkFunctionsOracleAbi, marketAbi } from "@/lib/abis";
 import { getRequiredAddresses } from "@/lib/contracts";
 import { decodeOracleMetadata } from "@/lib/oracle-metadata";
 
 const MAX_MARKETS_PER_RUN = 5;
+const DEFAULT_RETRY_COOLDOWN_MS = 30 * 60 * 1000;
 
 export async function runResolutionSync(reason: "manual" | "cron" | "loop" = "manual") {
   const prisma = getPrismaClient();
@@ -58,6 +59,38 @@ export async function runResolutionSync(reason: "manual" | "cron" | "loop" = "ma
   const results = [];
 
   for (const market of markets) {
+    const marketAddress = getAddress(market.marketAddress);
+    const chainResolved = await publicClient.readContract({
+      address: marketAddress,
+      abi: marketAbi,
+      functionName: "resolved"
+    });
+
+    if (chainResolved) {
+      const outcome = await publicClient.readContract({
+        address: marketAddress,
+        abi: marketAbi,
+        functionName: "winningOutcome"
+      });
+      await prisma.market.update({
+        where: {
+          id: market.id
+        },
+        data: {
+          resolved: true,
+          outcome: toMarketOutcome(Number(outcome)),
+          lastActivityAt: new Date()
+        }
+      });
+      results.push({
+        market: market.marketAddress,
+        status: "chain_resolved",
+        outcome: toMarketOutcome(Number(outcome)),
+        reason: "DB was stale; hydrated resolved state from chain."
+      });
+      continue;
+    }
+
     const metadata = decodeOracleMetadata(market.oracleQuery);
     if (!metadata || metadata.category !== "crypto" || metadata.provider !== "coingecko") {
       results.push({
@@ -72,7 +105,7 @@ export async function runResolutionSync(reason: "manual" | "cron" | "loop" = "ma
       address: addresses.chainlinkOracle,
       abi: chainlinkFunctionsOracleAbi,
       functionName: "marketPendingRequest",
-      args: [getAddress(market.marketAddress)]
+      args: [marketAddress]
     });
 
     if (pendingRequest !== "0x0000000000000000000000000000000000000000000000000000000000000000") {
@@ -80,6 +113,30 @@ export async function runResolutionSync(reason: "manual" | "cron" | "loop" = "ma
         market: market.marketAddress,
         status: "pending",
         requestId: pendingRequest
+      });
+      continue;
+    }
+
+    const recentRequest = await prisma.oracleResolutionAudit.findFirst({
+      where: {
+        marketId: market.id,
+        status: "REQUESTED",
+        requestedAt: {
+          gte: new Date(Date.now() - getRetryCooldownMs())
+        }
+      },
+      orderBy: {
+        requestedAt: "desc"
+      }
+    });
+
+    if (recentRequest) {
+      results.push({
+        market: market.marketAddress,
+        status: "cooldown",
+        auditId: recentRequest.id,
+        txHash: recentRequest.requestTxHash,
+        reason: "Recent Chainlink request exists; waiting before retrying."
       });
       continue;
     }
@@ -118,7 +175,7 @@ export async function runResolutionSync(reason: "manual" | "cron" | "loop" = "ma
         address: addresses.chainlinkOracle,
         abi: chainlinkFunctionsOracleAbi,
         functionName: "requestMarketResolution",
-        args: [getAddress(market.marketAddress)]
+        args: [marketAddress]
       });
 
       await prisma.oracleResolutionAudit.update({
@@ -175,4 +232,13 @@ function normalizePrivateKey(value: string | undefined): `0x${string}` | null {
 
   const normalized = value.startsWith("0x") ? value : `0x${value}`;
   return /^0x[0-9a-fA-F]{64}$/.test(normalized) ? (normalized as `0x${string}`) : null;
+}
+
+function getRetryCooldownMs() {
+  const raw = Number(process.env.RESOLUTION_RETRY_COOLDOWN_MS);
+  return Number.isFinite(raw) && raw >= 0 ? raw : DEFAULT_RETRY_COOLDOWN_MS;
+}
+
+function toMarketOutcome(outcome: number) {
+  return outcome === 1 ? "YES" : outcome === 2 ? "NO" : "PENDING";
 }

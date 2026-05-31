@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { parseUnits } from "viem";
-import { ArrowUpRight, Coins, FileText, Sparkles, TimerReset, WalletCards } from "lucide-react";
-import { useAccount, usePublicClient, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
+import { type PublicClient, formatEther, parseEther, parseUnits } from "viem";
+import { ArrowUpRight, CheckCircle2, Coins, FileText, LockKeyhole, ShieldCheck, Sparkles, TimerReset, WalletCards } from "lucide-react";
+import { useAccount, usePublicClient, useWriteContract } from "wagmi";
 
 import { ActionButton } from "@/components/ui/action-button";
 import { Panel } from "@/components/ui/panel";
@@ -21,15 +21,15 @@ import {
   type OracleMetadata,
   type OracleCategory
 } from "@/lib/oracle-metadata";
-import { failTxToast, handleTxToast, settleTxToast } from "@/lib/tx-toasts";
+import { dismissTxToast, failTxToast, handleTxToast, settleTxToast } from "@/lib/tx-toasts";
 
 export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void }) {
   const { address } = useAccount();
   const publicClient = usePublicClient();
-  const addresses = getRequiredAddresses();
+  const addresses = useMemo(() => getRequiredAddresses(), []);
   const [createForm, setCreateForm] = useState({
     question: "",
-    category: "cricket" as OracleCategory,
+    category: "crypto" as OracleCategory,
     cryptoAsset: "ETH",
     cryptoTargetPrice: "5000",
     cryptoDirection: "price_above",
@@ -57,22 +57,15 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
   const [creationFee, setCreationFee] = useState<bigint | null>(null);
   const [usdcBalance, setUsdcBalance] = useState<bigint>(0n);
   const [creationAllowance, setCreationAllowance] = useState<bigint>(0n);
+  const [nativeBalance, setNativeBalance] = useState<bigint>(0n);
   const [walletLoading, setWalletLoading] = useState(false);
   const [walletError, setWalletError] = useState<string | null>(null);
+  const [mintConfirming, setMintConfirming] = useState(false);
+  const [approveConfirming, setApproveConfirming] = useState(false);
+  const [createConfirming, setCreateConfirming] = useState(false);
+  const [walletRefreshNonce, setWalletRefreshNonce] = useState(0);
 
   const { writeContractAsync, isPending } = useWriteContract();
-  const { isSuccess: mintSuccess, isLoading: mintConfirming } = useWaitForTransactionReceipt({
-    hash: mintHash,
-    query: { enabled: Boolean(mintHash) }
-  });
-  const { isSuccess: approveSuccess, isLoading: approveConfirming } = useWaitForTransactionReceipt({
-    hash: approveHash,
-    query: { enabled: Boolean(approveHash) }
-  });
-  const { isSuccess: createSuccess, isLoading: createConfirming } = useWaitForTransactionReceipt({
-    hash: createHash,
-    query: { enabled: Boolean(createHash) }
-  });
 
   const busy = isPending || mintConfirming || approveConfirming || createConfirming;
   const defaultMarketHref = useMemo(() => {
@@ -80,8 +73,13 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
     return `/markets/${addresses.defaultMarket}`;
   }, [addresses?.defaultMarket]);
   const requiredFee = creationFee ?? parseUnits("10", 6);
+  const minimumApprovalGasBalance = parseEther("0.02");
+  const minimumCreateGasBalance = parseEther("0.35");
   const hasEnoughUsdc = (usdcBalance ?? 0n) >= requiredFee;
   const hasCreationApproval = (creationAllowance ?? 0n) >= requiredFee;
+  const hasGasForApproval = nativeBalance >= minimumApprovalGasBalance;
+  const hasGasForCreation = nativeBalance >= minimumCreateGasBalance;
+  const nativeBalanceLabel = `${formatPol(nativeBalance)} POL`;
   const settlementTimestamp = useMemo(() => {
     const minutes = Number(createForm.durationMinutes || "0");
     return Math.floor(Date.now() / 1000) + Math.max(Number.isFinite(minutes) ? minutes : 0, 1) * 60;
@@ -133,6 +131,11 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
     createForm.category === "cricket" ? "sports" : createForm.category;
   const generatedQuestion = oracleMetadata ? buildOracleQuestion(oracleMetadata) : "";
   const questionToCreate = createForm.question.trim() || generatedQuestion;
+  const categoryResolutionReady = createForm.category === "crypto";
+  const creationBlockedReason =
+    structuredOracleCreationEnabled && !categoryResolutionReady
+      ? "Only CoinGecko crypto markets are enabled for autonomous settlement right now."
+      : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -155,6 +158,7 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
           creationFee?: string;
           usdcBalance?: string;
           creationAllowance?: string;
+          nativeBalance?: string;
         };
 
         if (!response.ok || !payload.creationFee) {
@@ -165,12 +169,14 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
           setCreationFee(BigInt(payload.creationFee));
           setUsdcBalance(BigInt(payload.usdcBalance ?? "0"));
           setCreationAllowance(BigInt(payload.creationAllowance ?? "0"));
+          setNativeBalance(BigInt(payload.nativeBalance ?? "0"));
           setWalletLoading(false);
         }
       } catch (err) {
         if (!cancelled) {
           setCreationFee(null);
           setCreationAllowance(0n);
+          setNativeBalance(0n);
           setWalletError(err instanceof Error ? err.message : "Wallet sync unavailable.");
           setWalletLoading(false);
         }
@@ -182,11 +188,12 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
     return () => {
       cancelled = true;
     };
-  }, [address, addresses, mintSuccess, approveSuccess, createSuccess]);
+  }, [address, addresses, walletRefreshNonce]);
 
   async function handleMintUsdc() {
     const client = publicClient;
     if (!address || !addresses || !client) return;
+    let pendingToastId: string | number | null = null;
 
     try {
       setError(null);
@@ -201,20 +208,47 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
         ...fees
       });
       setMintHash(hash);
-      setMintToastId(handleTxToast({ hash, pendingLabel: `Minting ${collateralConfig.label}...` }));
+      const toastId = handleTxToast({ hash, pendingLabel: `Minting ${collateralConfig.label}...` });
+      pendingToastId = toastId;
+      setMintToastId(toastId);
+      setMintConfirming(true);
+      const receipt = await waitForPropagatedReceipt(client, hash);
+      setMintConfirming(false);
+      if (receipt.status !== "success") {
+        throw new Error(`${collateralConfig.label} mint reverted on-chain.`);
+      }
+      settleTxToast({
+        id: toastId,
+        hash,
+        status: "success",
+        successLabel: `${collateralConfig.label} minted.`,
+        errorLabel: `${collateralConfig.label} mint failed.`
+      });
+      setStatus(`${collateralConfig.label} ready in your wallet.`);
+      setStatusTone("success");
+      setWalletRefreshNonce((value) => value + 1);
     } catch (err) {
-      failTxToast(formatTxError(err));
+      setMintConfirming(false);
+      dismissTxToast(pendingToastId);
+      const message = formatTxError(err);
+      failTxToast(message);
       setStatusTone("error");
-      setError(formatTxError(err));
+      setError(message);
     }
   }
 
   async function handleApproveCreationFee() {
     const client = publicClient;
     if (!addresses || !client) return;
+    let pendingToastId: string | number | null = null;
 
     try {
       setError(null);
+      if (!hasGasForApproval) {
+        throw new Error(
+          `Add more POL for Amoy gas before approving. You have ${nativeBalanceLabel}; BharatMarket recommends at least ${formatPol(minimumApprovalGasBalance)} POL for approval.`
+        );
+      }
       setStatus(`Approving ${formatUsdc(requiredFee)} for market creation...`);
       setStatusTone("pending");
       const fees = await getSafeFeeOverrides(client);
@@ -226,17 +260,41 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
         ...fees
       });
       setApproveHash(hash);
-      setApproveToastId(handleTxToast({ hash, pendingLabel: "Approving creation fee..." }));
+      const toastId = handleTxToast({ hash, pendingLabel: "Approving creation fee..." });
+      pendingToastId = toastId;
+      setApproveToastId(toastId);
+      setApproveConfirming(true);
+      const receipt = await waitForPropagatedReceipt(client, hash);
+      setApproveConfirming(false);
+      if (receipt.status !== "success") {
+        throw new Error("Creation fee approval reverted on-chain.");
+      }
+      settleTxToast({
+        id: toastId,
+        hash,
+        status: "success",
+        successLabel: "Creation fee approved.",
+        errorLabel: "Creation fee approval failed."
+      });
+      setStatus("Creation fee approved. You can create the market now.");
+      setStatusTone("success");
+      setWalletRefreshNonce((value) => value + 1);
     } catch (err) {
-      failTxToast(formatTxError(err));
+      setApproveConfirming(false);
+      dismissTxToast(pendingToastId);
+      setApproveHash(undefined);
+      setApproveToastId(null);
+      const message = formatTxError(err);
+      failTxToast(message);
       setStatusTone("error");
-      setError(formatTxError(err));
+      setError(message);
     }
   }
 
   async function handleCreateMarket() {
     const client = publicClient;
     if (!addresses || !client) return;
+    let pendingToastId: string | number | null = null;
 
     try {
       setError(null);
@@ -246,11 +304,19 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
       if (!oracleMetadata || !contractOracleQuery) {
         throw new Error("Complete the structured oracle metadata before creating the market.");
       }
+      if (creationBlockedReason) {
+        throw new Error(creationBlockedReason);
+      }
       if (!hasEnoughUsdc) {
         throw new Error(`You need at least ${formatUsdc(requiredFee)} to pay the creation fee.`);
       }
       if (!hasCreationApproval) {
         throw new Error(`Approve ${collateralConfig.label} for the creation fee before creating the market.`);
+      }
+      if (!hasGasForCreation) {
+        throw new Error(
+          `Add more POL for Amoy gas before creating. You have ${nativeBalanceLabel}; market creation deploys contracts and BharatMarket recommends at least ${formatPol(minimumCreateGasBalance)} POL.`
+        );
       }
 
       const durationMinutes = Number(createForm.durationMinutes);
@@ -278,56 +344,30 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
         ...fees
       });
       setCreateHash(hash);
-      setCreateToastId(handleTxToast({ hash, pendingLabel: "Creating market..." }));
-    } catch (err) {
-      failTxToast(formatTxError(err));
-      setStatusTone("error");
-      setError(formatTxError(err));
-    }
-  }
-
-  useEffect(() => {
-    if (mintSuccess) {
-      setStatus(`${collateralConfig.label} ready in your wallet.`);
-      setStatusTone("success");
-      if (mintHash && mintToastId !== null) {
-        settleTxToast({
-          id: mintToastId,
-          hash: mintHash,
-          status: "success",
-          successLabel: `${collateralConfig.label} minted.`,
-          errorLabel: `${collateralConfig.label} mint failed.`
-        });
+      const toastId = handleTxToast({ hash, pendingLabel: "Creating market..." });
+      pendingToastId = toastId;
+      setCreateToastId(toastId);
+      setCreateConfirming(true);
+      const receipt = await waitForPropagatedReceipt(client, hash, 240_000);
+      setCreateConfirming(false);
+      if (receipt.status !== "success") {
+        throw new Error("Market creation reverted on-chain.");
       }
-    }
-  }, [mintHash, mintSuccess, mintToastId]);
-
-  useEffect(() => {
-    if (approveSuccess) {
-      setStatus("Creation fee approved. You can create the market now.");
-      setStatusTone("success");
-      if (approveHash && approveToastId !== null) {
-        settleTxToast({
-          id: approveToastId,
-          hash: approveHash,
-          status: "success",
-          successLabel: "Creation fee approved.",
-          errorLabel: "Creation fee approval failed."
-        });
-      }
-    }
-  }, [approveHash, approveSuccess, approveToastId]);
-
-  useEffect(() => {
-    if (createSuccess) {
+      settleTxToast({
+        id: toastId,
+        hash,
+        status: "success",
+        successLabel: "Market created.",
+        errorLabel: "Market creation failed."
+      });
       setStatus("Market created. Refresh the market board.");
       setStatusTone("success");
       onMarketCreated?.();
       setCreateForm({
         question: "",
-        category: "cricket",
-        cryptoAsset: "BTC",
-        cryptoTargetPrice: "100000",
+        category: "crypto",
+        cryptoAsset: "ETH",
+        cryptoTargetPrice: "5000",
         cryptoDirection: "price_above",
         cricketProvider: "cricapi",
         cricketMatchId: "mi_vs_kkr",
@@ -341,17 +381,16 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
         electionType: "winner",
         durationMinutes: "180"
       });
-      if (createHash && createToastId !== null) {
-        settleTxToast({
-          id: createToastId,
-          hash: createHash,
-          status: "success",
-          successLabel: "Market created.",
-          errorLabel: "Market creation failed."
-        });
-      }
+      setWalletRefreshNonce((value) => value + 1);
+    } catch (err) {
+      setCreateConfirming(false);
+      dismissTxToast(pendingToastId);
+      const message = formatTxError(err);
+      failTxToast(message);
+      setStatusTone("error");
+      setError(message);
     }
-  }, [createHash, createSuccess, createToastId, onMarketCreated]);
+  }
 
   const durationLabel = useMemo(() => {
     const minutes = Number(createForm.durationMinutes || "0");
@@ -371,11 +410,11 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
               Creator Form
             </p>
             <h2 className="mt-4 font-heading text-[2.4rem] leading-none text-white">
-              Build a new market
+              Build an oracle-settled market
             </h2>
             <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-400">
-              Configure the market question, oracle route, and expiry window with cleaner
-              creator controls built for provider-backed markets and Chainlink Functions settlement.
+              Launch crypto markets with structured metadata, CoinGecko verification, and Chainlink Functions settlement.
+              Cricket and election routes stay visible as future provider slots, but crypto is the live autonomous path.
             </p>
           </div>
 
@@ -406,50 +445,61 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
             </p>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-[0.85fr_1.15fr]">
-            <div className="grid gap-2">
-              <label className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
-                Market Category
-              </label>
-              <select
-                value={createForm.category}
-                onChange={(event) => setCreateForm((current) => ({ ...current, category: event.target.value as OracleCategory }))}
-                className="w-full rounded-[16px] border border-white/10 bg-slate-950/60 px-4 py-4 text-base text-white outline-none transition focus:border-violet-400/35"
-              >
-                <option value="crypto">crypto</option>
-                <option value="cricket">cricket</option>
-                <option value="election">election</option>
-              </select>
-            </div>
-
-            <div className="grid gap-2">
-              <label className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
-                Provider
-              </label>
-              <input
-                value={oracleMetadata?.provider ?? ""}
-                readOnly
-                placeholder="coingecko"
-                className="w-full rounded-[16px] border border-white/10 bg-slate-950/60 px-4 py-4 text-base text-white outline-none transition placeholder:text-slate-600 focus:border-violet-400/35"
-              />
-            </div>
+          <div className="grid gap-3 md:grid-cols-3">
+            <CategoryButton
+              active={createForm.category === "crypto"}
+              title="Crypto"
+              subtitle="CoinGecko live"
+              ready
+              onClick={() => setCreateForm((current) => ({ ...current, category: "crypto" }))}
+            />
+            <CategoryButton
+              active={createForm.category === "cricket"}
+              title="Cricket"
+              subtitle="Provider slot"
+              onClick={() => setCreateForm((current) => ({ ...current, category: "cricket" }))}
+            />
+            <CategoryButton
+              active={createForm.category === "election"}
+              title="Election"
+              subtitle="Architecture only"
+              onClick={() => setCreateForm((current) => ({ ...current, category: "election" }))}
+            />
           </div>
 
           {createForm.category === "crypto" ? (
             <div className="grid gap-4 md:grid-cols-3">
-              <Field label="Asset" value={createForm.cryptoAsset} onChange={(value) => setCreateForm((current) => ({ ...current, cryptoAsset: value.toUpperCase() }))} placeholder="BTC" />
-              <Field label="Target Price" value={createForm.cryptoTargetPrice} onChange={(value) => setCreateForm((current) => ({ ...current, cryptoTargetPrice: value }))} placeholder="100000" />
+              <div className="grid gap-2">
+                <label className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Asset</label>
+                <select
+                  value={createForm.cryptoAsset}
+                  onChange={(event) => setCreateForm((current) => ({ ...current, cryptoAsset: event.target.value, question: shouldRegenerateQuestion(current.question) ? "" : current.question }))}
+                  className="w-full rounded-[16px] border border-white/10 bg-slate-950/60 px-4 py-4 text-base text-white outline-none transition focus:border-violet-400/35"
+                >
+                  <option value="ETH">Ethereum</option>
+                  <option value="BTC">Bitcoin</option>
+                  <option value="SOL">Solana</option>
+                  <option value="USDC">USD Coin</option>
+                </select>
+              </div>
+              <Field label="Target Price" value={createForm.cryptoTargetPrice} onChange={(value) => setCreateForm((current) => ({ ...current, cryptoTargetPrice: value, question: shouldRegenerateQuestion(current.question) ? "" : current.question }))} placeholder="5000" />
               <div className="grid gap-2">
                 <label className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Direction</label>
                 <select
                   value={createForm.cryptoDirection}
-                  onChange={(event) => setCreateForm((current) => ({ ...current, cryptoDirection: event.target.value }))}
+                  onChange={(event) => setCreateForm((current) => ({ ...current, cryptoDirection: event.target.value, question: shouldRegenerateQuestion(current.question) ? "" : current.question }))}
                   className="w-full rounded-[16px] border border-white/10 bg-slate-950/60 px-4 py-4 text-base text-white outline-none transition focus:border-violet-400/35"
                 >
                   <option value="price_above">above</option>
                   <option value="price_below">below</option>
                 </select>
               </div>
+            </div>
+          ) : null}
+
+          {creationBlockedReason ? (
+            <div className="rounded-[18px] border border-gold/20 bg-gold/10 p-4 text-sm leading-6 text-gold">
+              {creationBlockedReason} Select Crypto to create an end-to-end resolvable market.
             </div>
           ) : null}
 
@@ -510,7 +560,7 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
                   }
                   className="rounded-[12px] border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-300 transition hover:border-white/20 hover:text-white"
                 >
-                  IPL Match
+                  IPL Match Soon
                 </button>
                 <button
                   type="button"
@@ -534,7 +584,7 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
                   onClick={() =>
                     setCreateForm({
                       question: "",
-                      category: "cricket",
+                      category: "crypto",
                       cryptoAsset: "ETH",
                       cryptoTargetPrice: "5000",
                       cryptoDirection: "price_above",
@@ -569,11 +619,11 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
             </div>
             <div className="rounded-[16px] border border-white/8 bg-white/[0.03] p-4">
               <div className="flex items-center gap-2 text-slate-400">
-                <FileText className="h-4 w-4" />
-                <p className="text-[10px] uppercase tracking-[0.16em]">Oracle Route</p>
+                <ShieldCheck className="h-4 w-4" />
+                <p className="text-[10px] uppercase tracking-[0.16em]">Settlement Route</p>
               </div>
               <p className="mt-3 text-sm text-white">
-                {contractOracleType} / {oracleMetadata?.marketType ?? "No rule yet"}
+                {categoryResolutionReady ? "CoinGecko -> Chainlink -> on-chain resolution" : "Provider adapter not enabled for production settlement"}
               </p>
             </div>
           </div>
@@ -581,7 +631,7 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
           <div className="grid gap-3 sm:grid-cols-2">
             <ActionButton
               onClick={handleApproveCreationFee}
-              disabled={!address || !addresses || busy || hasCreationApproval}
+              disabled={!address || !addresses || busy || hasCreationApproval || !hasGasForApproval}
               tone="mint"
               className="justify-center py-4"
             >
@@ -594,7 +644,7 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
 
             <ActionButton
               onClick={handleCreateMarket}
-              disabled={!address || !addresses || busy || !hasCreationApproval || !hasEnoughUsdc}
+              disabled={!address || !addresses || busy || !hasCreationApproval || !hasEnoughUsdc || !hasGasForCreation || Boolean(creationBlockedReason)}
               tone="gold"
               className="justify-center py-4"
             >
@@ -602,7 +652,28 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
             </ActionButton>
           </div>
 
+          {!hasGasForApproval ? (
+            <TxStatusNotice
+              state="error"
+              title="More POL needed for approval gas"
+              detail={`Your wallet has ${nativeBalanceLabel}. Add at least ${formatPol(minimumApprovalGasBalance)} POL on Amoy, then refresh and try approval again.`}
+            />
+          ) : null}
+          {hasGasForApproval && !hasGasForCreation ? (
+            <TxStatusNotice
+              state="pending"
+              title="Approval gas is available, but creation needs more POL"
+              detail={`Your wallet has ${nativeBalanceLabel}. Market creation deploys contracts, so keep around ${formatPol(minimumCreateGasBalance)} POL before clicking Create Market.`}
+            />
+          ) : null}
           {status && statusTone ? <TxStatusNotice state={statusTone} title={status} /> : null}
+          {approveHash && approveConfirming ? (
+            <TxStatusNotice
+              state="pending"
+              title="Waiting for approval confirmation"
+              detail="Polygon Amoy can take a little while. You can keep this page open while BharatMarket watches the approval receipt."
+            />
+          ) : null}
           {error ? <TxStatusNotice state="error" title="Create market failed" detail={error} /> : null}
         </div>
       </Panel>
@@ -629,6 +700,11 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
                 value={walletLoading ? "Syncing" : walletError ? "Unavailable" : formatUsdc(usdcBalance ?? 0n)}
               />
               <PreviewMetric icon={Coins} label="Creation Fee" value={formatUsdc(requiredFee)} />
+              <PreviewMetric
+                icon={WalletCards}
+                label="Amoy Gas"
+                value={walletLoading ? "Syncing" : walletError ? "Unavailable" : nativeBalanceLabel}
+              />
               <PreviewMetric icon={Sparkles} label="Oracle Type" value={contractOracleType || "--"} />
               <PreviewMetric icon={TimerReset} label="Expiry Window" value={durationLabel} />
             </div>
@@ -644,6 +720,27 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
                   ? encodedOracleQuery || "Encoded oracle query will appear here."
                   : `Legacy-compatible query: ${contractOracleQuery || "--"}`}
               </p>
+            </div>
+
+            <div className="grid gap-3">
+              <TrustStep
+                icon={CheckCircle2}
+                title="1. Structured rule"
+                detail={oracleMetadata?.settlementRule ?? "Complete the oracle form."}
+                active={Boolean(oracleMetadata)}
+              />
+              <TrustStep
+                icon={ShieldCheck}
+                title="2. Provider verification"
+                detail={categoryResolutionReady ? "CoinGecko market_chart/range is sampled after expiry." : "Provider not production-enabled yet."}
+                active={categoryResolutionReady}
+              />
+              <TrustStep
+                icon={LockKeyhole}
+                title="3. Chainlink settlement"
+                detail="Chainlink Functions returns YES/NO plus the fetched settlement price for indexing."
+                active={categoryResolutionReady}
+              />
             </div>
 
             <div className="rounded-[16px] border border-white/8 bg-white/[0.03] p-4 text-sm text-slate-300">
@@ -735,6 +832,66 @@ function Field({
   );
 }
 
+function CategoryButton({
+  active,
+  title,
+  subtitle,
+  ready = false,
+  onClick
+}: {
+  active: boolean;
+  title: string;
+  subtitle: string;
+  ready?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-[20px] border px-4 py-4 text-left transition ${
+        active
+          ? "border-mint/30 bg-[linear-gradient(135deg,rgba(95,242,191,0.16),rgba(95,242,191,0.05))] text-white shadow-[0_0_28px_rgba(95,242,191,0.08)]"
+          : "border-white/10 bg-white/[0.03] text-slate-300 hover:border-white/20 hover:text-white"
+      }`}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <p className="font-heading text-xl uppercase">{title}</p>
+        <span className={`rounded-full px-2 py-1 text-[9px] uppercase tracking-[0.2em] ${
+          ready ? "bg-mint/15 text-mint" : "bg-gold/10 text-gold"
+        }`}>
+          {ready ? "Live" : "Soon"}
+        </span>
+      </div>
+      <p className="mt-2 text-xs uppercase tracking-[0.18em] text-slate-500">{subtitle}</p>
+    </button>
+  );
+}
+
+function TrustStep({
+  icon: Icon,
+  title,
+  detail,
+  active
+}: {
+  icon: typeof CheckCircle2;
+  title: string;
+  detail: string;
+  active: boolean;
+}) {
+  return (
+    <div className={`rounded-[16px] border px-4 py-3 ${
+      active ? "border-mint/15 bg-mint/[0.04]" : "border-white/8 bg-white/[0.03]"
+    }`}>
+      <div className="flex items-center gap-3">
+        <Icon className={`h-4 w-4 ${active ? "text-mint" : "text-slate-500"}`} />
+        <p className="text-[10px] uppercase tracking-[0.18em] text-slate-400">{title}</p>
+      </div>
+      <p className="mt-2 text-sm leading-6 text-slate-300">{detail}</p>
+    </div>
+  );
+}
+
 function buildLegacyOracleQuery(metadata: OracleMetadata) {
   if (metadata.category === "crypto") {
     return `${metadata.asset.toLowerCase()}_price`;
@@ -745,6 +902,56 @@ function buildLegacyOracleQuery(metadata: OracleMetadata) {
   }
 
   return metadata.electionId;
+}
+
+function shouldRegenerateQuestion(question: string) {
+  const trimmed = question.trim();
+  return !trimmed || /^Will (ETH|BTC|SOL|USDC) be (above|below) \$/i.test(trimmed);
+}
+
+function formatPol(value: bigint) {
+  const numeric = Number(formatEther(value));
+  if (!Number.isFinite(numeric)) return "0.0000";
+  if (numeric >= 1) return numeric.toFixed(3);
+  return numeric.toFixed(4);
+}
+
+async function waitForPropagatedReceipt(
+  client: PublicClient,
+  hash: `0x${string}`,
+  receiptTimeoutMs = 180_000
+) {
+  const propagated = await waitForTransactionPropagation(client, hash);
+  if (!propagated) {
+    throw new Error(
+      "Wallet returned a transaction hash, but Amoy RPC could not find it. The transaction was likely dropped or not broadcast. Reset MetaMask activity if needed, then try again."
+    );
+  }
+
+  return client.waitForTransactionReceipt({
+    hash,
+    pollingInterval: 8_000,
+    timeout: receiptTimeoutMs
+  });
+}
+
+async function waitForTransactionPropagation(client: PublicClient, hash: `0x${string}`) {
+  const deadline = Date.now() + 30_000;
+
+  while (Date.now() < deadline) {
+    const tx = await client.getTransaction({ hash }).catch(() => null);
+    if (tx) {
+      return true;
+    }
+
+    await sleep(3_000);
+  }
+
+  return false;
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function PreviewMetric({

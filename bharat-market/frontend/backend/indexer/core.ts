@@ -56,6 +56,13 @@ export async function syncProtocolIndexer(params: {
   });
 
   for (const market of markets) {
+    await hydrateMarketChainState(
+      params.prisma,
+      params.publicClient,
+      market.id,
+      market.marketAddress as Address
+    );
+
     await syncMarketEvents(
       params.prisma,
       params.publicClient,
@@ -129,6 +136,8 @@ export async function syncSingleMarketIndexer(params: {
       createdTxHash: true
     }
   });
+
+  await hydrateMarketChainState(params.prisma, params.publicClient, market.id, params.marketAddress);
 
   await syncMarketEvents(
     params.prisma,
@@ -410,6 +419,59 @@ async function upsertIndexedMarket(
       noPool: INITIAL_POOL_LIQUIDITY,
       liquidity: INITIAL_POOL_LIQUIDITY * 2n,
       volume: 0n
+    }
+  });
+}
+
+async function hydrateMarketChainState(
+  prisma: PrismaClient,
+  publicClient: PublicClient,
+  marketId: string,
+  marketAddress: Address
+) {
+  const [resolved, outcome, yesPool, noPool] = await Promise.all([
+    publicClient.readContract({
+      address: marketAddress,
+      abi: marketAbi,
+      functionName: "resolved"
+    }),
+    publicClient.readContract({
+      address: marketAddress,
+      abi: marketAbi,
+      functionName: "winningOutcome"
+    }),
+    publicClient.readContract({
+      address: marketAddress,
+      abi: marketAbi,
+      functionName: "yesPool"
+    }),
+    publicClient.readContract({
+      address: marketAddress,
+      abi: marketAbi,
+      functionName: "noPool"
+    })
+  ]);
+  const { yesProbability, noProbability } = getProbabilities(yesPool, noPool);
+
+  await prisma.market.update({
+    where: {
+      id: marketId
+    },
+    data: {
+      resolved,
+      outcome: resolved
+        ? Number(outcome) === 1
+          ? "YES"
+          : Number(outcome) === 2
+            ? "NO"
+            : "PENDING"
+        : "PENDING",
+      yesPool,
+      noPool,
+      totalLiquidity: yesPool + noPool,
+      latestYesProbability: yesProbability,
+      latestNoProbability: noProbability,
+      lastActivityAt: resolved ? new Date() : undefined
     }
   });
 }

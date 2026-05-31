@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { zeroHash } from "viem";
 import { useAccount, usePublicClient, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
+import { Activity, Clock3, LockKeyhole, ShieldCheck } from "lucide-react";
 
 import { ActionButton } from "@/components/ui/action-button";
 import { Panel } from "@/components/ui/panel";
@@ -119,25 +120,40 @@ export function ResolutionPanel({
   const tooEarly = now < endTime;
   const hasPending = Boolean(pendingRequest && pendingRequest !== zeroHash);
   const disabled = !chainlinkOracleAddress || marketResolved || tooEarly || hasPending || isPending || isLoading;
+  const resolutionState = marketResolved
+    ? "Verified"
+    : hasPending
+      ? "Chainlink pending"
+      : tooEarly
+        ? "Waiting expiry"
+        : "Ready to request";
 
   return (
     <Panel className="p-5">
-      <h3 className="font-heading text-2xl uppercase text-white">Resolution</h3>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-[10px] uppercase tracking-[0.28em] text-gold">Oracle Settlement</p>
+          <h3 className="mt-2 font-heading text-2xl uppercase text-white">Resolution</h3>
+        </div>
+        <span className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-[10px] uppercase tracking-[0.22em] text-slate-300">
+          {resolutionState}
+        </span>
+      </div>
       <p className="mt-2 text-sm leading-6 text-slate-300">
-        After the market end time, request Chainlink Functions resolution directly from the UI.
+        {marketResolved
+          ? "Chainlink Functions has finalized this market. Redemption is now governed by the winning outcome shown above."
+          : "After expiry, Chainlink Functions fetches the configured provider data, returns the deterministic outcome, and unlocks redemption."}
       </p>
 
-      <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
-        <div className="flex items-center justify-between">
-          <span>Resolved</span>
-          <span className="font-semibold text-white">{marketResolved ? "Yes" : "No"}</span>
-        </div>
-        <div className="mt-2 flex items-center justify-between">
-          <span>Pending request</span>
-          <span className="font-semibold text-white">
-            {hasPending ? `${pendingRequest?.slice(0, 10)}...` : "None"}
-          </span>
-        </div>
+      <div className="mt-5 grid gap-3">
+        <ResolutionStep icon={Clock3} label="Expiry" value={tooEarly ? "Locked" : "Reached"} active={!tooEarly} />
+        <ResolutionStep
+          icon={Activity}
+          label="Request"
+          value={marketResolved ? "Fulfilled" : hasPending ? `${pendingRequest?.slice(0, 10)}...` : "None"}
+          active={marketResolved || hasPending}
+        />
+        <ResolutionStep icon={ShieldCheck} label="Outcome" value={marketResolved ? "Resolved" : "Pending"} active={marketResolved} />
       </div>
 
       {tooEarly ? (
@@ -164,14 +180,48 @@ export function ResolutionPanel({
         />
       ) : null}
 
-      <ActionButton
-        onClick={handleRequestResolution}
-        disabled={disabled}
-        tone="coral"
-        className="mt-5 w-full"
-      >
-        {isPending || isLoading ? "Requesting..." : "Request Resolution"}
-      </ActionButton>
+      {marketResolved ? (
+        <TxStatusNotice
+          state="success"
+          title="Oracle settlement complete"
+          detail="No further resolution request is needed for this market."
+        />
+      ) : (
+        <ActionButton
+          onClick={handleRequestResolution}
+          disabled={disabled}
+          tone="coral"
+          className="mt-5 w-full"
+        >
+          {isPending || isLoading ? "Requesting..." : "Request Resolution"}
+        </ActionButton>
+      )}
     </Panel>
+  );
+}
+
+function ResolutionStep({
+  icon: Icon,
+  label,
+  value,
+  active
+}: {
+  icon: typeof LockKeyhole;
+  label: string;
+  value: string;
+  active: boolean;
+}) {
+  return (
+    <div className={`rounded-2xl border px-4 py-3 ${
+      active ? "border-mint/20 bg-mint/[0.05]" : "border-white/10 bg-white/[0.035]"
+    }`}>
+      <div className="flex items-center justify-between gap-3">
+        <span className="inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.22em] text-slate-500">
+          <Icon className={active ? "h-4 w-4 text-mint" : "h-4 w-4 text-slate-500"} />
+          {label}
+        </span>
+        <span className="text-sm font-semibold text-white">{value}</span>
+      </div>
+    </div>
   );
 }

@@ -62,3 +62,9 @@ export function settleTxToast({
 export function failTxToast(message: string) {
   toast.error(message);
 }
+
+export function dismissTxToast(id: string | number | null) {
+  if (id !== null) {
+    toast.dismiss(id);
+  }
+}

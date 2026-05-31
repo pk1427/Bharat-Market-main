@@ -39,11 +39,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         creationFee: creationFee.toString(),
         usdcBalance: "0",
-        creationAllowance: "0"
+        creationAllowance: "0",
+        nativeBalance: "0"
       });
     }
 
-    const [usdcBalance, creationAllowance] = await Promise.all([
+    const [usdcBalance, creationAllowance, nativeBalance] = await Promise.all([
       publicClient.readContract({
         address: usdc,
         abi: erc20Abi,
@@ -55,13 +56,15 @@ export async function GET(request: NextRequest) {
         abi: erc20Abi,
         functionName: "allowance",
         args: [account, marketFactory]
-      })
+      }),
+      publicClient.getBalance({ address: account })
     ]);
 
     return NextResponse.json({
       creationFee: creationFee.toString(),
       usdcBalance: usdcBalance.toString(),
-      creationAllowance: creationAllowance.toString()
+      creationAllowance: creationAllowance.toString(),
+      nativeBalance: nativeBalance.toString()
     });
   } catch (error) {
     return NextResponse.json(

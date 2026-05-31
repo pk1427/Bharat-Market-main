@@ -1,7 +1,7 @@
 {
   "crons": [
     {
-      "path": "/api/internal/indexer-sync",
+      "path": "/api/internal/exchange-sync",
       "schedule": "0 0 * * *"
     }
   ]

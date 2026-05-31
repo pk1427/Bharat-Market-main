@@ -10,11 +10,12 @@ import {
   Gauge,
   LineChart,
   ShieldCheck,
+  LockKeyhole,
   TrendingUp,
   Users,
   Waves
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   useAccount,
   usePublicClient,
@@ -63,7 +64,7 @@ export function MarketDetail({ address }: { address: string }) {
   const [chartRange, setChartRange] = useState<"1H" | "24H" | "ALL">("ALL");
   const marketHistory = useMarketHistory(market, chartRange);
 
-  const addresses = getRequiredAddresses();
+  const addresses = useMemo(() => getRequiredAddresses(), []);
   const { writeContractAsync, isPending: redeemPending } = useWriteContract();
   const {
     data: redeemReceipt,
@@ -188,6 +189,13 @@ export function MarketDetail({ address }: { address: string }) {
       : market.status === "awaiting"
         ? "Trading is closed. The contract is waiting for oracle resolution and redemption unlocks once the outcome is finalized."
         : "This market has resolved. Final balances, winning outcome, and redemption state are shown below.";
+  const oracleSettled = Boolean(market.oracleMetadata?.settlementPrice);
+  const oracleTrustLabel = oracleSettled
+    ? "Settlement verified"
+    : market.status === "awaiting"
+      ? "Awaiting oracle fetch"
+      : "Oracle armed";
+  const oracleTrustTone = oracleSettled ? "mint" : market.status === "awaiting" ? "gold" : "slate";
 
   return (
     <div className="space-y-6">
@@ -237,6 +245,13 @@ export function MarketDetail({ address }: { address: string }) {
                       : "slate"
                 }
               />
+              {market.oracleMetadata ? (
+                <GlowBadge
+                  label={oracleTrustLabel}
+                  tone={oracleTrustTone}
+                  pulse={market.status === "awaiting" && !oracleSettled}
+                />
+              ) : null}
             </div>
 
             <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_280px] xl:items-start">
@@ -312,25 +327,67 @@ export function MarketDetail({ address }: { address: string }) {
       </Panel>
 
       {market.oracleMetadata ? (
-        <Panel className="grid gap-5 p-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
-          <div>
-            <p className="text-[10px] uppercase tracking-[0.28em] text-mint">Oracle Transparency</p>
-            <h2 className="mt-3 font-heading text-3xl uppercase text-white">
-              Resolved via {market.oracleSource}
-            </h2>
-            <p className="mt-3 text-sm leading-7 text-slate-300">
-              {market.oracleMetadata.settlementRule}
-            </p>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <DataRow label="Provider" value={market.oracleMetadata.provider} />
-            <DataRow label="Market Type" value={market.oracleMetadata.marketType} />
-            <DataRow label="External ID" value={market.oracleMetadata.externalId ?? "--"} />
-            <DataRow label="Verification Source" value={market.oracleMetadata.verificationSource} />
-            <DataRow label="Fallback Source" value={market.oracleMetadata.fallbackSource ?? "--"} />
-            <DataRow label="Settlement Price" value={formatSettlementPrice(market.oracleMetadata.settlementPrice)} />
-            <DataRow label="Observed At" value={formatSettlementObservedAt(market.oracleMetadata.settlementObservedAt)} />
-            <DataRow label="Settlement Summary" value={market.oracleMetadata.settlementSummary ?? "Awaiting oracle fulfillment"} />
+        <Panel className="overflow-hidden p-0">
+          <div className="grid gap-0 lg:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)]">
+            <div className="relative overflow-hidden px-6 py-6">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(95,242,191,0.14),transparent_45%)]" />
+              <div className="relative">
+                <p className="text-[10px] uppercase tracking-[0.28em] text-mint">Oracle Transparency</p>
+                <h2 className="mt-3 font-heading text-4xl uppercase tracking-[-0.04em] text-white">
+                  {oracleSettled ? "Settlement Verified" : "Settlement Pipeline Armed"}
+                </h2>
+                <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-300">
+                  {market.oracleMetadata.settlementRule}
+                </p>
+
+                <div className="mt-6 grid gap-3 sm:grid-cols-3">
+                  <OracleStep
+                    icon={ShieldCheck}
+                    label="Provider"
+                    value={market.oracleMetadata.provider}
+                    active
+                  />
+                  <OracleStep
+                    icon={Activity}
+                    label="Fetch"
+                    value={oracleSettled ? "Price captured" : market.status === "awaiting" ? "Ready after request" : "Waiting expiry"}
+                    active={market.status !== "active"}
+                  />
+                  <OracleStep
+                    icon={LockKeyhole}
+                    label="On-chain"
+                    value={market.resolved ? market.winningLabel : "Pending"}
+                    active={market.resolved}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t border-white/6 bg-black/15 p-5 lg:border-l lg:border-t-0">
+              <div className="rounded-[24px] border border-mint/15 bg-mint/[0.05] p-5">
+                <p className="text-[10px] uppercase tracking-[0.28em] text-mint">Fetched Settlement Price</p>
+                <p className="mt-3 font-mono text-4xl font-semibold text-white">
+                  {formatSettlementPrice(market.oracleMetadata.settlementPrice)}
+                </p>
+                <p className="mt-2 text-xs text-slate-400">
+                  Observed {formatSettlementObservedAt(market.oracleMetadata.settlementObservedAt)}
+                </p>
+              </div>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <DataRow label="Market Type" value={market.oracleMetadata.marketType} />
+                <DataRow label="External ID" value={market.oracleMetadata.externalId ?? "--"} />
+                <DataRow label="Verification Source" value={market.oracleMetadata.verificationSource} />
+                <DataRow label="Fallback Source" value={market.oracleMetadata.fallbackSource ?? "None"} />
+              </div>
+
+              <div className="mt-4 rounded-2xl bg-slate-950/30 p-4">
+                <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">Settlement Summary</p>
+                <p className="mt-3 text-sm leading-6 text-slate-300">
+                  {market.oracleMetadata.settlementSummary ?? "No Chainlink fulfillment has been indexed yet. Once fulfilled, BharatMarket will show the fetched CoinGecko price, outcome, and redemption state here."}
+                </p>
+              </div>
+            </div>
           </div>
         </Panel>
       ) : null}
@@ -484,7 +541,29 @@ function DataRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-2xl bg-slate-950/30 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
       <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">{label}</p>
-      <p className="mt-3 text-lg font-semibold text-white">{value}</p>
+      <p className="mt-3 break-words text-lg font-semibold text-white">{value}</p>
+    </div>
+  );
+}
+
+function OracleStep({
+  icon: Icon,
+  label,
+  value,
+  active
+}: {
+  icon: typeof ShieldCheck;
+  label: string;
+  value: string;
+  active: boolean;
+}) {
+  return (
+    <div className={`rounded-[20px] border px-4 py-4 ${
+      active ? "border-mint/20 bg-mint/[0.06]" : "border-white/8 bg-white/[0.035]"
+    }`}>
+      <Icon className={`h-4 w-4 ${active ? "text-mint" : "text-slate-500"}`} />
+      <p className="mt-3 text-[10px] uppercase tracking-[0.24em] text-slate-500">{label}</p>
+      <p className="mt-2 text-sm font-semibold text-white">{value}</p>
     </div>
   );
 }
