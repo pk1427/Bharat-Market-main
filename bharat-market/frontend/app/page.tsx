@@ -34,21 +34,32 @@ export default function HomePage() {
     externalRefreshTick: marketRefreshTick
   });
   const analytics = useBoardAnalytics();
+  const boardMarkets = useMemo(
+    () => markets.filter((market) => market.status !== "resolved"),
+    [markets]
+  );
+  const boardTopMovers = useMemo(
+    () => analytics.topMovers.filter((market) => market.status !== "resolved"),
+    [analytics.topMovers]
+  );
+  const boardTrending = useMemo(
+    () => analytics.trending.filter((market) => market.status !== "resolved"),
+    [analytics.trending]
+  );
 
   const boardMetrics = useMemo(() => {
-    const activeMarkets = markets.filter((market) => market.status === "active");
-    const awaitingMarkets = markets.filter((market) => market.status === "awaiting");
-    const resolvedMarkets = markets.filter((market) => market.status === "resolved");
-    const totalVolume = markets.reduce((sum, market) => sum + market.volume, 0n);
-    const totalLiquidity = markets.reduce((sum, market) => sum + market.liquidity, 0n);
-    const liveTraders = markets.reduce((sum, market) => sum + market.traderCount, 0);
-    const categoryItems = [...markets.reduce((map, market) => {
+    const activeMarkets = boardMarkets.filter((market) => market.status === "active");
+    const awaitingMarkets = boardMarkets.filter((market) => market.status === "awaiting");
+    const totalVolume = boardMarkets.reduce((sum, market) => sum + market.volume, 0n);
+    const totalLiquidity = boardMarkets.reduce((sum, market) => sum + market.liquidity, 0n);
+    const liveTraders = boardMarkets.reduce((sum, market) => sum + market.traderCount, 0);
+    const categoryItems = [...boardMarkets.reduce((map, market) => {
       map.set(market.category, (map.get(market.category) ?? 0) + 1);
       return map;
     }, new Map<string, number>())]
       .sort((left, right) => right[1] - left[1])
       .slice(0, 3);
-    const featured = (analytics.trending.length > 0 ? analytics.trending : [...markets])
+    const featured = (boardTrending.length > 0 ? boardTrending : [...boardMarkets])
       .slice()
       .sort((left, right) => {
         const scoreLeft = Number(left.volume + left.liquidity / 4n) + left.traderCount * 1_000_000;
@@ -57,9 +68,9 @@ export default function HomePage() {
       })
       .slice(0, 4);
     const topMovers =
-      analytics.topMovers.length > 0
-        ? analytics.topMovers.slice(0, 3)
-        : [...markets]
+      boardTopMovers.length > 0
+        ? boardTopMovers.slice(0, 3)
+        : [...boardMarkets]
             .sort(
               (left, right) =>
                 Math.abs(formatProbabilityNumber(right.yesProbability) - 50) -
@@ -70,7 +81,6 @@ export default function HomePage() {
     return {
       activeMarkets,
       awaitingMarkets,
-      resolvedMarkets,
       totalVolume,
       totalLiquidity,
       liveTraders,
@@ -78,17 +88,17 @@ export default function HomePage() {
       featured,
       topMovers
     };
-  }, [analytics.topMovers, analytics.trending, markets]);
+  }, [boardMarkets, boardTopMovers, boardTrending]);
 
   const tickerItems = useMemo(
     () =>
       [...new Map(
-        markets.map((market) => [
+        boardMarkets.map((market) => [
           market.address,
           `${market.category} • ${market.question.slice(0, 32)}${market.question.length > 32 ? "..." : ""} • YES ${formatPercent(market.yesProbability)}`
         ])
       ).values()].slice(0, 8),
-    [markets]
+    [boardMarkets]
   );
 
   const leadMarket = boardMetrics.featured[0];
@@ -302,7 +312,7 @@ export default function HomePage() {
 
           <MarketList
             externalRefreshTick={marketRefreshTick}
-            board={{ markets, total: markets.length, loading, error, warning, meta: null, refresh }}
+            board={{ markets: boardMarkets, total: boardMarkets.length, loading, error, warning, meta: null, refresh }}
           />
         </div>
 

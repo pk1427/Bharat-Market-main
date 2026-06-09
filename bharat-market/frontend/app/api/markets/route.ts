@@ -1,4 +1,8 @@
 import { buildApiMeta } from "@/backend/api/response";
+import {
+  INDEXED_ONLY_WARNING,
+  isDashboardRpcFallbackAllowed
+} from "@/backend/api/rpc-fallback";
 import { NextResponse } from "next/server";
 
 import { getIndexedMarketBoardPage } from "@/backend/services/markets";
@@ -66,6 +70,7 @@ export async function GET(request: Request) {
   const addresses = getRequiredAddresses();
   const requestUrl = new URL(request.url);
   const forceFresh = requestUrl.searchParams.get("fresh") === "1";
+  const allowRpcFallback = isDashboardRpcFallbackAllowed(request);
   const search = requestUrl.searchParams.get("search");
   const statusParam = requestUrl.searchParams.get("status");
   const status =
@@ -83,31 +88,29 @@ export async function GET(request: Request) {
   }
 
   try {
-    if (!forceFresh) {
-      const indexedQuery = {
-        search,
-        status,
-        take: Number.isFinite(limit) ? Math.min(limit, 100) : 100,
-        skip: Number.isFinite(offset) ? Math.max(offset, 0) : 0
-      } as const;
-      const indexedPage = await getIndexedMarketBoardPage(indexedQuery);
+    const indexedQuery = {
+      search,
+      status,
+      take: Number.isFinite(limit) ? Math.min(limit, 100) : 100,
+      skip: Number.isFinite(offset) ? Math.max(offset, 0) : 0
+    } as const;
+    const indexedPage = await getIndexedMarketBoardPage(indexedQuery);
 
-      if (indexedPage) {
-        return NextResponse.json({
-          markets: indexedPage.markets,
-          total: indexedPage.total,
-          meta: buildApiMeta({
-            source: "indexed",
-            indexed: true,
-            hasMore: offset + indexedPage.markets.length < indexedPage.total
-          })
-        });
-      }
+    if (indexedPage) {
+      return NextResponse.json({
+        markets: indexedPage.markets,
+        total: indexedPage.total,
+        meta: buildApiMeta({
+          source: "indexed",
+          indexed: true,
+          hasMore: offset + indexedPage.markets.length < indexedPage.total
+        })
+      });
     }
 
     const cached = await getCachedSummaries();
     if (!forceFresh && cached) {
-      if (!isFresh(cached.updatedAt, SUMMARY_TTL_MS)) {
+      if (allowRpcFallback && !isFresh(cached.updatedAt, SUMMARY_TTL_MS)) {
         void buildMarketBoardSnapshot(addresses.marketFactory).catch(() => {
           // Keep serving the last good backend snapshot if refresh fails.
         });
@@ -129,6 +132,19 @@ export async function GET(request: Request) {
           updatedAt: cached.updatedAt,
           fallbackUsed: true,
           hasMore: offset + filtered.items.length < filtered.total
+        })
+      });
+    }
+
+    if (!allowRpcFallback) {
+      return NextResponse.json({
+        markets: [],
+        total: 0,
+        meta: buildApiMeta({
+          source: "indexed",
+          indexed: true,
+          stale: true,
+          warning: INDEXED_ONLY_WARNING
         })
       });
     }
@@ -181,11 +197,13 @@ export async function GET(request: Request) {
       markets: [],
       total: 0,
       meta: buildApiMeta({
-        source: "rpc",
+        source: "indexed",
+        indexed: true,
         stale: true,
         warning:
-          "Market index is warming up. BharatMarket is waiting for the indexed backend or RPC fallback to become available.",
-        fallbackUsed: true
+          error instanceof Error
+            ? error.message
+            : INDEXED_ONLY_WARNING
       })
     });
   }

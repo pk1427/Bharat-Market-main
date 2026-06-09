@@ -1,4 +1,8 @@
 import { buildApiMeta } from "@/backend/api/response";
+import {
+  INDEXED_ONLY_WARNING,
+  isDashboardRpcFallbackAllowed
+} from "@/backend/api/rpc-fallback";
 import { NextRequest, NextResponse } from "next/server";
 import { getAddress } from "viem";
 
@@ -90,27 +94,28 @@ export async function GET(
   const accountParam = request.nextUrl.searchParams.get("account");
   const account = accountParam ? getAddress(accountParam) : undefined;
   const forceFresh = request.nextUrl.searchParams.get("fresh") === "1";
+  const allowRpcFallback = isDashboardRpcFallbackAllowed(request);
   const freshness = forceFresh ? null : await getMarketIndexerFreshness(marketAddress);
 
   try {
-    if (!forceFresh && freshness?.fresh) {
-      const indexed = await getIndexedMarketDetail(marketAddress, account);
-      if (indexed) {
-        return NextResponse.json({
-          market: indexed.market,
-          pendingRequest: indexed.pendingRequest,
-          meta: buildApiMeta({
-            source: "indexed",
-            indexed: true,
-            updatedAt: freshness.updatedAt ?? undefined
-          })
-        });
-      }
+    const indexed = await getIndexedMarketDetail(marketAddress, account);
+    if (indexed) {
+      return NextResponse.json({
+        market: indexed.market,
+        pendingRequest: indexed.pendingRequest,
+        meta: buildApiMeta({
+          source: "indexed",
+          indexed: true,
+          stale: freshness ? !freshness.fresh : false,
+          warning: freshness && !freshness.fresh ? freshness.reason : null,
+          updatedAt: freshness?.updatedAt ?? undefined
+        })
+      });
     }
 
     const cached = await getCachedDetail(marketAddress, account);
     if (!forceFresh && cached) {
-      if (!isFresh(cached.updatedAt, DETAIL_TTL_MS)) {
+      if (allowRpcFallback && !isFresh(cached.updatedAt, DETAIL_TTL_MS)) {
         void buildMarketDetailSnapshot(addresses, marketAddress, account).catch(() => {
           // Keep serving the last good backend snapshot if refresh fails.
         });
@@ -127,6 +132,21 @@ export async function GET(
           warning: freshness && !freshness.fresh ? freshness.reason : null
         })
       });
+    }
+
+    if (!allowRpcFallback) {
+      return NextResponse.json(
+        {
+          error: INDEXED_ONLY_WARNING,
+          meta: buildApiMeta({
+            source: "indexed",
+            indexed: true,
+            stale: true,
+            warning: INDEXED_ONLY_WARNING
+          })
+        },
+        { status: 404 }
+      );
     }
 
     const snapshot = await buildMarketDetailSnapshot(addresses, marketAddress, account);
@@ -166,7 +186,16 @@ export async function GET(
         error:
           error instanceof Error
             ? error.message
-            : "Failed to load market details from RPC."
+            : INDEXED_ONLY_WARNING,
+        meta: buildApiMeta({
+          source: "indexed",
+          indexed: true,
+          stale: true,
+          warning:
+            error instanceof Error
+              ? error.message
+              : INDEXED_ONLY_WARNING
+        })
       },
       { status: 503 }
     );

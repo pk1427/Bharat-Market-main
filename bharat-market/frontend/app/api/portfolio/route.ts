@@ -1,4 +1,8 @@
 import { buildApiMeta } from "@/backend/api/response";
+import {
+  INDEXED_ONLY_WARNING,
+  isDashboardRpcFallbackAllowed
+} from "@/backend/api/rpc-fallback";
 import { getPortfolioIndexerFreshness } from "@/backend/services/indexer-freshness";
 import { getIndexedMarketBoardPage } from "@/backend/services/markets";
 import { NextRequest, NextResponse } from "next/server";
@@ -221,6 +225,8 @@ async function buildPortfolioPayload(account: `0x${string}`, addresses: NonNulla
 export async function GET(request: NextRequest) {
   const account = parseAccount(request);
   const addresses = getRequiredAddresses();
+  const forceFresh = request.nextUrl.searchParams.get("fresh") === "1";
+  const allowRpcFallback = isDashboardRpcFallbackAllowed(request);
 
   if (!account) {
     return NextResponse.json({ error: "Missing or invalid account address." }, { status: 400 });
@@ -231,25 +237,24 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const forceFresh = request.nextUrl.searchParams.get("fresh") === "1";
     const freshness = forceFresh ? null : await getPortfolioIndexerFreshness();
 
-    if (!forceFresh && freshness?.fresh) {
-      const indexedPortfolio = await getIndexedPortfolio(account);
-      if (indexedPortfolio) {
-        return NextResponse.json({
-          ...indexedPortfolio,
-          meta: buildApiMeta({
-            source: "indexed",
-            indexed: true,
-            updatedAt: freshness.updatedAt ?? indexedPortfolio.updatedAt
-          })
-        });
-      }
+    const indexedPortfolio = await getIndexedPortfolio(account);
+    if (indexedPortfolio) {
+      return NextResponse.json({
+        ...indexedPortfolio,
+        meta: buildApiMeta({
+          source: "indexed",
+          indexed: true,
+          stale: freshness ? !freshness.fresh : false,
+          warning: freshness && !freshness.fresh ? freshness.reason : null,
+          updatedAt: freshness?.updatedAt ?? indexedPortfolio.updatedAt
+        })
+      });
     }
 
     const cachedPortfolio = await getCachedPortfolio(account);
-    if (!forceFresh && cachedPortfolio && freshness?.fresh) {
+    if (!forceFresh && cachedPortfolio) {
       return NextResponse.json({
         ...(cachedPortfolio.data as Record<string, unknown>),
         meta: buildApiMeta({
@@ -258,6 +263,18 @@ export async function GET(request: NextRequest) {
           updatedAt: cachedPortfolio.updatedAt,
           fallbackUsed: true,
           warning: null
+        })
+      });
+    }
+
+    if (!allowRpcFallback) {
+      return NextResponse.json({
+        ...buildEmptyPortfolioPayload(),
+        meta: buildApiMeta({
+          source: "indexed",
+          indexed: true,
+          stale: true,
+          warning: freshness && !freshness.fresh ? freshness.reason : INDEXED_ONLY_WARNING
         })
       });
     }
@@ -296,9 +313,35 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(
       {
-        error: error instanceof Error ? error.message : "Failed to build portfolio."
-      },
-      { status: 500 }
+        ...buildEmptyPortfolioPayload(),
+        meta: buildApiMeta({
+          source: "indexed",
+          indexed: true,
+          stale: true,
+          warning:
+            error instanceof Error
+              ? error.message
+              : INDEXED_ONLY_WARNING
+        })
+      }
     );
   }
+}
+
+function buildEmptyPortfolioPayload() {
+  return {
+    overview: {
+      walletUsdcBalance: "0",
+      yesHoldings: "0",
+      noHoldings: "0",
+      lpHoldings: "0",
+      redeemableWinnings: "0",
+      activePositions: 0,
+      estimatedPositionValue: "0",
+      unrealizedPnl: "0"
+    },
+    groups: [],
+    updatedAt: new Date().toISOString(),
+    indexed: true
+  };
 }

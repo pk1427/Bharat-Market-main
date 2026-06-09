@@ -60,8 +60,8 @@ export function useMarketBoard({
     },
     placeholderData: (previousData) => previousData,
     staleTime: 20_000,
-    refetchInterval: 120_000,
-    refetchOnWindowFocus: false
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true
   });
 
   const refresh = useCallback(() => {

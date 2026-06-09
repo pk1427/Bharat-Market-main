@@ -1,4 +1,8 @@
 import { buildApiMeta } from "@/backend/api/response";
+import {
+  INDEXED_ONLY_WARNING,
+  isDashboardRpcFallbackAllowed
+} from "@/backend/api/rpc-fallback";
 import { NextRequest, NextResponse } from "next/server";
 import { getAddress } from "viem";
 
@@ -45,26 +49,25 @@ export async function GET(
     const { address } = await context.params;
     const marketAddress = getAddress(address);
     const forceFresh = request.nextUrl.searchParams.get("fresh") === "1";
+    const allowRpcFallback = isDashboardRpcFallbackAllowed(request);
     const range = (request.nextUrl.searchParams.get("range") ?? "ALL") as "1H" | "24H" | "ALL";
-    if (!forceFresh) {
-      const indexedHistory = await getIndexedMarketHistory(marketAddress, {
-        range
+    const indexedHistory = await getIndexedMarketHistory(marketAddress, {
+      range
+    });
+    if (indexedHistory && indexedHistory.length > 0) {
+      return NextResponse.json({
+        points: indexedHistory,
+        meta: buildApiMeta({
+          source: "indexed",
+          indexed: true,
+          range
+        })
       });
-      if (indexedHistory && indexedHistory.length > 0) {
-        return NextResponse.json({
-          points: indexedHistory,
-          meta: buildApiMeta({
-            source: "indexed",
-            indexed: true,
-            range
-          })
-        });
-      }
     }
 
     const cached = await getCachedHistory(marketAddress);
     if (!forceFresh && cached) {
-      if (!isFresh(cached.updatedAt, HISTORY_TTL_MS)) {
+      if (allowRpcFallback && !isFresh(cached.updatedAt, HISTORY_TTL_MS)) {
         void buildMarketHistorySnapshot(addresses.marketFactory, marketAddress).catch(() => {
           // Keep serving the last good backend history snapshot if refresh fails.
         });
@@ -77,6 +80,19 @@ export async function GET(
           stale: !isFresh(cached.updatedAt, HISTORY_TTL_MS),
           updatedAt: cached.updatedAt,
           fallbackUsed: true,
+          range
+        })
+      });
+    }
+
+    if (!allowRpcFallback) {
+      return NextResponse.json({
+        points: [],
+        meta: buildApiMeta({
+          source: "indexed",
+          indexed: true,
+          stale: true,
+          warning: INDEXED_ONLY_WARNING,
           range
         })
       });
@@ -114,12 +130,13 @@ export async function GET(
     return NextResponse.json({
       points: [],
       meta: buildApiMeta({
-        source: "rpc",
+        source: "indexed",
+        indexed: true,
         stale: true,
         warning:
           error instanceof Error
             ? error.message
-            : "Failed to load market history."
+            : INDEXED_ONLY_WARNING
       })
     });
   }

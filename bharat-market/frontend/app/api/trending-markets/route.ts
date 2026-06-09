@@ -1,4 +1,5 @@
 import { buildApiMeta } from "@/backend/api/response";
+import { INDEXED_ONLY_WARNING } from "@/backend/api/rpc-fallback";
 import { NextRequest, NextResponse } from "next/server";
 
 import { parsePositiveInt } from "@/backend/api/pagination";
@@ -11,8 +12,10 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     markets: markets ?? [],
     meta: buildApiMeta({
-      source: markets !== null ? "indexed" : "rpc",
-      indexed: markets !== null
+      source: "indexed",
+      indexed: markets !== null,
+      stale: markets === null,
+      warning: markets === null ? INDEXED_ONLY_WARNING : null
     })
   });
 }

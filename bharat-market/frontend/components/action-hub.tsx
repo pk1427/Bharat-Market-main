@@ -353,6 +353,7 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
       if (receipt.status !== "success") {
         throw new Error("Market creation reverted on-chain.");
       }
+      await syncCreatedMarket(hash);
       settleTxToast({
         id: toastId,
         hash,
@@ -952,6 +953,16 @@ async function waitForTransactionPropagation(client: PublicClient, hash: `0x${st
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function syncCreatedMarket(txHash: `0x${string}`) {
+  await fetch("/api/markets/sync-created", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ txHash })
+  }).catch(() => null);
 }
 
 function PreviewMetric({

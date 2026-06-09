@@ -1,4 +1,8 @@
 import { buildApiMeta } from "@/backend/api/response";
+import {
+  INDEXED_ONLY_WARNING,
+  isDashboardRpcFallbackAllowed
+} from "@/backend/api/rpc-fallback";
 import { NextRequest, NextResponse } from "next/server";
 import { getAddress } from "viem";
 
@@ -284,32 +288,31 @@ export async function GET(
     const { address } = await context.params;
     const marketAddress = getAddress(address);
     const forceFresh = _request.nextUrl.searchParams.get("fresh") === "1";
+    const allowRpcFallback = isDashboardRpcFallbackAllowed(_request);
     const limit = Number(_request.nextUrl.searchParams.get("limit") ?? "100");
     const cursor = _request.nextUrl.searchParams.get("cursor");
-    if (!forceFresh) {
-      const indexedActivity = await getIndexedMarketActivity(
-        marketAddress,
-        {
-          limit: Number.isFinite(limit) ? Math.min(limit, 200) : 100,
-          cursor
-        }
-      );
-      if (indexedActivity) {
-        return NextResponse.json({
-          items: indexedActivity.items,
-          meta: buildApiMeta({
-            source: "indexed",
-            indexed: true,
-            cursor: indexedActivity.nextCursor,
-            hasMore: Boolean(indexedActivity.nextCursor)
-          })
-        });
+    const indexedActivity = await getIndexedMarketActivity(
+      marketAddress,
+      {
+        limit: Number.isFinite(limit) ? Math.min(limit, 200) : 100,
+        cursor
       }
+    );
+    if (indexedActivity) {
+      return NextResponse.json({
+        items: indexedActivity.items,
+        meta: buildApiMeta({
+          source: "indexed",
+          indexed: true,
+          cursor: indexedActivity.nextCursor,
+          hasMore: Boolean(indexedActivity.nextCursor)
+        })
+      });
     }
 
     const cached = await getCachedActivity(marketAddress);
     if (!forceFresh && cached) {
-      if (!isFresh(cached.updatedAt, ACTIVITY_TTL_MS)) {
+      if (allowRpcFallback && !isFresh(cached.updatedAt, ACTIVITY_TTL_MS)) {
         void buildMarketActivitySnapshot(addresses, marketAddress).catch(() => {
           // Keep serving the last good backend activity snapshot if refresh fails.
         });
@@ -322,6 +325,18 @@ export async function GET(
           stale: !isFresh(cached.updatedAt, ACTIVITY_TTL_MS),
           updatedAt: cached.updatedAt,
           fallbackUsed: true
+        })
+      });
+    }
+
+    if (!allowRpcFallback) {
+      return NextResponse.json({
+        items: [],
+        meta: buildApiMeta({
+          source: "indexed",
+          indexed: true,
+          stale: true,
+          warning: INDEXED_ONLY_WARNING
         })
       });
     }
@@ -357,12 +372,13 @@ export async function GET(
     return NextResponse.json({
       items: [],
       meta: buildApiMeta({
-        source: "rpc",
+        source: "indexed",
+        indexed: true,
         stale: true,
         warning:
           error instanceof Error
             ? error.message
-            : "Failed to load activity."
+            : INDEXED_ONLY_WARNING
       })
     });
   }

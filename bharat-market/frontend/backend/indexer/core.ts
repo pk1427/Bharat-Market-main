@@ -154,6 +154,92 @@ export async function syncSingleMarketIndexer(params: {
   };
 }
 
+export async function syncCreatedMarketFromTransaction(params: {
+  prisma: PrismaClient;
+  publicClient: PublicClient;
+  marketFactory: Address;
+  txHash: `0x${string}`;
+}) {
+  const receipt = await params.publicClient.getTransactionReceipt({
+    hash: params.txHash
+  });
+
+  if (receipt.status !== "success") {
+    throw new Error("Market creation transaction did not succeed.");
+  }
+
+  const createdLog = receipt.logs
+    .filter((log) => log.address.toLowerCase() === params.marketFactory.toLowerCase())
+    .map((log) => {
+      try {
+        return {
+          raw: log,
+          decoded: decodeEventLog({
+            abi: marketFactoryAbi,
+            data: log.data,
+            topics: log.topics
+          })
+        };
+      } catch {
+        return null;
+      }
+    })
+    .find((entry) => entry?.decoded.eventName === "MarketCreated");
+
+  if (!createdLog) {
+    throw new Error("No MarketCreated event found in transaction receipt.");
+  }
+
+  const args = createdLog.decoded.args as {
+    market?: Address;
+    creator?: Address;
+    question?: string;
+    endTime?: bigint;
+  };
+  const marketAddress = args.market;
+
+  if (!marketAddress || args.question === undefined || args.endTime === undefined) {
+    throw new Error("MarketCreated event is missing required fields.");
+  }
+
+  const createdAt = await getBlockTimestamp(params.publicClient, receipt.blockNumber);
+  await upsertIndexedMarket(params.prisma, params.publicClient, {
+    marketAddress,
+    question: args.question,
+    creator: args.creator?.toLowerCase() ?? null,
+    createdAt,
+    createdBlock: receipt.blockNumber,
+    createdTxHash: params.txHash,
+    endTime: new Date(Number(args.endTime) * 1000)
+  });
+
+  const market = await params.prisma.market.findUniqueOrThrow({
+    where: {
+      marketAddress: marketAddress.toLowerCase()
+    },
+    select: {
+      id: true
+    }
+  });
+
+  await hydrateMarketChainState(params.prisma, params.publicClient, market.id, marketAddress);
+  await syncMarketEvents(
+    params.prisma,
+    params.publicClient,
+    market.id,
+    marketAddress,
+    receipt.blockNumber,
+    receipt.blockNumber
+  );
+
+  return {
+    status: "market_synced" as const,
+    marketAddress,
+    txHash: params.txHash,
+    indexedThrough: receipt.blockNumber.toString()
+  };
+}
+
 async function bootstrapFactoryMarkets(
   prisma: PrismaClient,
   publicClient: PublicClient,
