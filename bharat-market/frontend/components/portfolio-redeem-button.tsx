@@ -5,6 +5,7 @@ import { useAccount, usePublicClient, useWriteContract } from "wagmi";
 
 import { marketAbi } from "@/lib/abis";
 import { getCappedGasLimit, getSafeFeeOverrides } from "@/lib/fees";
+import { syncMarketAfterTransaction } from "@/lib/market-sync";
 import { failTxToast, handleTxToast, settleTxToast } from "@/lib/tx-toasts";
 
 export function PortfolioRedeemButton({
@@ -63,6 +64,11 @@ export function PortfolioRedeemButton({
           successLabel: "Redeem confirmed.",
           errorLabel: "Redeem failed."
         });
+        await syncMarketAfterTransaction({
+          txHash: hash,
+          marketAddress,
+          mode: "market"
+        }).catch(() => null);
         onComplete();
       } else {
         settleTxToast({

@@ -35,6 +35,7 @@ import { TxStatusNotice } from "@/components/ui/tx-status-notice";
 import { marketAbi } from "@/lib/abis";
 import { getRequiredAddresses } from "@/lib/contracts";
 import { getCappedGasLimit, getSafeFeeOverrides } from "@/lib/fees";
+import { syncMarketAfterTransaction } from "@/lib/market-sync";
 import { useIndexerStatus } from "@/hooks/use-indexer-status";
 import {
   formatPercent,
@@ -92,7 +93,19 @@ export function MarketDetail({ address }: { address: string }) {
 
   useEffect(() => {
     if (redeemReceipt?.status === "success") {
-      void detail.refresh(true);
+      if (!redeemHash || !market) {
+        void detail.refresh(true);
+        return;
+      }
+      void syncMarketAfterTransaction({
+        txHash: redeemHash,
+        marketAddress: market.address,
+        mode: "market"
+      })
+        .catch(() => null)
+        .finally(() => {
+          void detail.refresh(true);
+        });
       return;
     }
 

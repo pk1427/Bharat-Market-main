@@ -11,6 +11,7 @@ import { TxStatusNotice } from "@/components/ui/tx-status-notice";
 import { chainlinkFunctionsOracleAbi } from "@/lib/abis";
 import { getCappedGasLimit, getSafeFeeOverrides } from "@/lib/fees";
 import { formatTxError } from "@/lib/format";
+import { syncMarketAfterTransaction } from "@/lib/market-sync";
 import { failTxToast, handleTxToast, settleTxToast } from "@/lib/tx-toasts";
 
 export function ResolutionPanel({
@@ -54,7 +55,19 @@ export function ResolutionPanel({
           errorLabel: "Resolution request failed."
         });
       }
-      onComplete();
+      if (!txHash) {
+        onComplete();
+        return;
+      }
+      void syncMarketAfterTransaction({
+        txHash,
+        marketAddress,
+        mode: "oracle"
+      })
+        .catch(() => null)
+        .finally(() => {
+          onComplete();
+        });
     }
     if (receipt?.status === "reverted") {
       if (txHash && toastId !== null) {

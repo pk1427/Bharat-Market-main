@@ -10,6 +10,7 @@ import { TxStatusNotice } from "@/components/ui/tx-status-notice";
 import { marketAbi } from "@/lib/abis";
 import { getCappedGasLimit, getSafeFeeOverrides } from "@/lib/fees";
 import { formatShares, formatTxError } from "@/lib/format";
+import { syncMarketAfterTransaction } from "@/lib/market-sync";
 import { failTxToast, handleTxToast, settleTxToast } from "@/lib/tx-toasts";
 
 export function LiquidityPanel({
@@ -78,7 +79,17 @@ export function LiquidityPanel({
       if (txKind === "add") {
         setAmount("");
       }
-      onComplete();
+      void syncMarketAfterTransaction({
+        txHash,
+        marketAddress,
+        mode: "market"
+      })
+        .catch(() => {
+          // Keep the UI responsive even if sync is delayed.
+        })
+        .finally(() => {
+          onComplete();
+        });
       return;
     }
 

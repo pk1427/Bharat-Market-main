@@ -11,6 +11,7 @@ import { TxStatusNotice } from "@/components/ui/tx-status-notice";
 import { marketAbi } from "@/lib/abis";
 import { getCappedGasLimit, getSafeFeeOverrides } from "@/lib/fees";
 import { formatShares, formatTxError, formatUsdc } from "@/lib/format";
+import { syncMarketAfterTransaction } from "@/lib/market-sync";
 import { failTxToast, handleTxToast, settleTxToast } from "@/lib/tx-toasts";
 
 type Side = "yes" | "no";
@@ -191,13 +192,24 @@ export function TradePanel({
           errorLabel: side === "yes" ? "YES purchase failed." : "NO purchase failed."
         });
       }
-      onComplete();
-      void refreshTradeState(side, "")
-        .catch(() => {
-          // Ignore refresh failure here; parent refresh still runs.
-        });
-      setAmount("");
-      setPreview(0n);
+      void (async () => {
+        try {
+          await syncMarketAfterTransaction({
+            txHash,
+            marketAddress,
+            mode: "market"
+          });
+        } catch {
+          // Keep the UI responsive even if a post-tx sync is delayed.
+        } finally {
+          onComplete();
+          void refreshTradeState(side, "").catch(() => {
+            // Ignore refresh failure here; parent refresh still runs.
+          });
+          setAmount("");
+          setPreview(0n);
+        }
+      })();
       return;
     }
 
