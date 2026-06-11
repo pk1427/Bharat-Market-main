@@ -22,6 +22,7 @@ import {
 } from "@/backend/indexer/math";
 import { chainlinkFunctionsOracleAbi, marketAbi, marketFactoryAbi, outcomeTokenAbi } from "@/lib/abis";
 import { decodeOracleMetadata, summarizeOracleMetadata } from "@/lib/oracle-metadata";
+import { queueWebhookEvent } from "@/backend/services/webhooks";
 
 type RequiredAddresses = {
   marketFactory: Address;
@@ -364,6 +365,23 @@ async function syncFactoryEvents(
           volume: 0n
         }
       });
+
+      await queueWebhookEvent({
+        prisma,
+        eventType: "market.created",
+        sourceEventKey: eventKey(log.transactionHash, log.logIndex),
+        payload: {
+          eventType: "market.created",
+          sourceEventKey: eventKey(log.transactionHash, log.logIndex),
+          timestamp: timestamp.toISOString(),
+          marketAddress: marketAddress.toLowerCase(),
+          question,
+          creator: log.args.creator?.toLowerCase() ?? null,
+          txHash: log.transactionHash,
+          blockNumber: log.blockNumber?.toString() ?? "0",
+          endTime: Number(endTime)
+        }
+      });
     }
 
     await setCursorBlock(prisma, cursorName, toBlock);
@@ -507,6 +525,23 @@ async function upsertIndexedMarket(
       volume: 0n
     }
   });
+
+  await queueWebhookEvent({
+    prisma,
+    eventType: "market.created",
+    sourceEventKey: `bootstrap:${input.marketAddress.toLowerCase()}`,
+    payload: {
+      eventType: "market.created",
+      sourceEventKey: `bootstrap:${input.marketAddress.toLowerCase()}`,
+      timestamp: input.createdAt.toISOString(),
+      marketAddress: input.marketAddress.toLowerCase(),
+      question: inferredQuestion,
+      creator: input.creator ?? owner.toLowerCase(),
+      txHash: input.createdTxHash ?? ZERO_HASH,
+      blockNumber: input.createdBlock.toString(),
+      endTime: Number(chainEndTime)
+    }
+  });
 }
 
 async function hydrateMarketChainState(
@@ -624,6 +659,35 @@ async function syncOracleEvents(
           blockNumber: log.blockNumber,
           logIndex: log.logIndex,
           timestamp: await getBlockTimestamp(publicClient, log.blockNumber)
+        }
+      });
+
+      const eventType =
+        log.eventName === "ResolutionRequested"
+          ? "oracle.requested"
+          : log.eventName === "ResolutionFulfilled"
+            ? "oracle.fulfilled"
+            : "oracle.failed";
+
+      await queueWebhookEvent({
+        prisma,
+        eventType,
+        sourceEventKey: eventKey(log.transactionHash, log.logIndex),
+        payload: {
+          eventType,
+          sourceEventKey: eventKey(log.transactionHash, log.logIndex),
+          timestamp: (await getBlockTimestamp(publicClient, log.blockNumber)).toISOString(),
+          marketAddress: marketAddress.toLowerCase(),
+          question: market.question,
+          txHash: log.transactionHash,
+          blockNumber: log.blockNumber.toString(),
+          requestId: (args.requestId as string | null | undefined) ?? null,
+          provider: (args.provider as string | null | undefined) || market.oracleProvider || null,
+          externalId: (args.externalId as string | null | undefined) || market.oracleExternalId || null,
+          settlementPriceE8:
+            args.settlementPriceE8 !== undefined ? BigInt(args.settlementPriceE8).toString() : null,
+          outcome: args.outcome !== undefined ? Number(args.outcome) : null,
+          errorData: (args.errorData as string | null | undefined) ?? null
         }
       });
 
@@ -875,6 +939,26 @@ async function syncMarketEvents(
           }
         });
 
+        await queueWebhookEvent({
+          prisma,
+          eventType: "trade.executed",
+          sourceEventKey: snapshotKey,
+          payload: {
+            eventType: "trade.executed",
+            sourceEventKey: snapshotKey,
+            timestamp: timestamp.toISOString(),
+            marketAddress: market.marketAddress.toLowerCase(),
+            question: market.question,
+            txHash: entry.log.transactionHash,
+            blockNumber: entry.log.blockNumber?.toString() ?? "0",
+            actor: trader.toLowerCase(),
+            side,
+            amountIn: amountIn.toString(),
+            sharesMinted: sharesMinted.toString(),
+            probability: probability.toString()
+          }
+        });
+
         await prisma.walletPosition.update({
           where: {
             wallet_marketId_side: {
@@ -963,6 +1047,24 @@ async function syncMarketEvents(
           }
         });
 
+        await queueWebhookEvent({
+          prisma,
+          eventType: entry.kind === "add" ? "liquidity.added" : "liquidity.removed",
+          sourceEventKey: snapshotKey,
+          payload: {
+            eventType: entry.kind === "add" ? "liquidity.added" : "liquidity.removed",
+            sourceEventKey: snapshotKey,
+            timestamp: timestamp.toISOString(),
+            marketAddress: market.marketAddress.toLowerCase(),
+            question: market.question,
+            txHash: entry.log.transactionHash,
+            blockNumber: entry.log.blockNumber?.toString() ?? "0",
+            actor: provider.toLowerCase(),
+            collateralAmount: amount.toString(),
+            lpTokens: lpTokens.toString()
+          }
+        });
+
         await upsertSnapshot(prisma, {
           eventKey: snapshotKey,
           marketId,
@@ -997,6 +1099,23 @@ async function syncMarketEvents(
             timestamp
           }
         });
+
+        await queueWebhookEvent({
+          prisma,
+          eventType: "market.redeemed",
+          sourceEventKey: snapshotKey,
+          payload: {
+            eventType: "market.redeemed",
+            sourceEventKey: snapshotKey,
+            timestamp: timestamp.toISOString(),
+            marketAddress: market.marketAddress.toLowerCase(),
+            question: market.question,
+            txHash: entry.log.transactionHash,
+            blockNumber: entry.log.blockNumber?.toString() ?? "0",
+            redeemer: redeemer.toLowerCase(),
+            payoutAmount: payout.toString()
+          }
+        });
       }
 
       if (entry.kind === "resolve") {
@@ -1015,6 +1134,22 @@ async function syncMarketEvents(
                   ? "NO"
                   : "PENDING",
             lastActivityAt: timestamp
+          }
+        });
+
+        await queueWebhookEvent({
+          prisma,
+          eventType: "market.resolved",
+          sourceEventKey: snapshotKey,
+          payload: {
+            eventType: "market.resolved",
+            sourceEventKey: snapshotKey,
+            timestamp: timestamp.toISOString(),
+            marketAddress: market.marketAddress.toLowerCase(),
+            question: market.question,
+            txHash: entry.log.transactionHash,
+            blockNumber: entry.log.blockNumber?.toString() ?? "0",
+            outcome: Number(outcome) === 1 ? "YES" : Number(outcome) === 2 ? "NO" : "PENDING"
           }
         });
       }

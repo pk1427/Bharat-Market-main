@@ -92,6 +92,10 @@ export function WalletBar() {
   const onExpectedNetwork = chainId === polygonAmoy.id;
   const networkLabel = onExpectedNetwork ? "Amoy" : "Wrong network";
 
+  if (pathname.startsWith("/embed")) {
+    return null;
+  }
+
   return (
     <div className="sticky top-3 z-50 mb-8">
       <div className="rounded-[18px] border border-white/8 bg-[rgba(10,10,16,0.88)] px-4 py-3 shadow-[0_12px_40px_rgba(0,0,0,0.35)] backdrop-blur-xl">

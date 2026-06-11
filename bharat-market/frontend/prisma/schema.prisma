@@ -264,6 +264,41 @@ model OracleResolutionAudit {
   @@index([status, requestedAt(sort: Desc)])
 }
 
+model WebhookSubscription {
+  id         String            @id @default(cuid())
+  owner      String?
+  url        String
+  secret     String
+  events     String[]
+  active     Boolean           @default(true)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  deliveries WebhookDelivery[]
+
+  @@index([owner])
+  @@index([active])
+}
+
+model WebhookDelivery {
+  id              String               @id @default(cuid())
+  subscriptionId  String
+  subscription    WebhookSubscription  @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  sourceEventKey  String
+  eventType       String
+  payload         Json
+  status          String               @default("PENDING")
+  attempts        Int                  @default(0)
+  nextAttemptAt   DateTime?
+  lastError       String?
+  deliveredAt     DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  @@unique([subscriptionId, sourceEventKey])
+  @@index([status, nextAttemptAt])
+  @@index([subscriptionId, createdAt(sort: Desc)])
+}
+
 model IndexerCursor {
   name             String   @id
   lastIndexedBlock BigInt
