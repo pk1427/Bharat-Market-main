@@ -4,6 +4,7 @@ import {
   BookOpen,
   CheckCircle2,
   Code2,
+  ExternalLink,
   FileJson,
   GitBranch,
   Globe2,
@@ -21,6 +22,7 @@ const docNav = [
     group: "Introduction",
     items: [
       ["Overview", "#overview"],
+      ["Public proofs", "#proofs"],
       ["BharatMarket 101", "#bharatmarket-101"],
       ["Supported markets", "#supported-markets"],
       ["Market lifecycle", "#market-lifecycle"]
@@ -66,6 +68,7 @@ const docNav = [
 
 const toc = [
   ["Documentation overview", "#overview"],
+  ["Public proofs", "#proofs"],
   ["BharatMarket 101", "#bharatmarket-101"],
   ["Supported markets", "#supported-markets"],
   ["Oracle architecture", "#oracle-metadata"],
@@ -73,6 +76,52 @@ const toc = [
   ["Integrate", "#quickstart"],
   ["Reference", "#contracts"],
   ["Roadmap", "#roadmap"]
+];
+
+const repositoryUrl = "https://github.com/pk1427/Bharat-Market-main";
+const liveAppUrl = "https://bharat-market-main.vercel.app";
+const amoyExplorerUrl = "https://amoy.polygonscan.com";
+
+const publicProofs = [
+  {
+    title: "GitHub repository",
+    href: repositoryUrl,
+    body: "Public source code for the app, contracts, indexer, workers, SDK foundation, embeds, and documentation."
+  },
+  {
+    title: "Live deployment",
+    href: liveAppUrl,
+    body: "Production Vercel deployment connected to Polygon Amoy, indexed backend data, and wallet-native execution."
+  },
+  {
+    title: "Polygon Amoy explorer",
+    href: amoyExplorerUrl,
+    body: "Verify market creation, trades, approvals, Chainlink requests, settlements, and redemptions on-chain."
+  },
+  {
+    title: "Public market API",
+    href: "/api/public/markets",
+    body: "Database-backed market feed used by external products, embeds, and protocol integrations."
+  }
+];
+
+const contractProofs = [
+  {
+    label: "MarketFactory",
+    address: "0x5f69D163122cda1C1e2305925D143dcD93F406Cd"
+  },
+  {
+    label: "Chainlink Oracle",
+    address: "0xb693A863Fd3580A107297F1C246fC70924439951"
+  },
+  {
+    label: "USDC collateral",
+    address: "0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582"
+  },
+  {
+    label: "Fee vault",
+    address: "0x13aB65b9c696C6960781D1321AEe211844e5e18a"
+  }
 ];
 
 const supportedMarkets = [
@@ -159,6 +208,7 @@ export default function DocsPage() {
               <DocFact label="Network" value="Polygon Amoy" />
               <DocFact label="Collateral" value="USDC" />
               <DocFact label="Stage" value="Testnet beta" />
+              <DocFact label="Source" value="Public GitHub" />
             </div>
           </div>
 
@@ -174,6 +224,7 @@ export default function DocsPage() {
               <LinkButton href="/create-market" label="Create market" />
               <LinkButton href="/embed" label="Embed widgets" />
               <LinkButton href="#quickstart" label="Integrate" />
+              <ExternalLinkButton href={repositoryUrl} label="GitHub" />
             </div>
           </div>
         </div>
@@ -205,6 +256,31 @@ export default function DocsPage() {
             <p>
               The live system currently focuses on crypto and cricket markets. Both use structured oracle metadata so the result is externally sourced, reproducible, auditable, and visible in the UI.
             </p>
+          </DocsSection>
+
+          <DocsSection id="proofs" icon={Globe2} eyebrow="Verification" title="Public proofs">
+            <p>
+              BharatMarket is intentionally inspectable: the source is public, the app is live, market actions are verifiable on Polygon Amoy, and indexed market data is exposed through public API routes.
+            </p>
+            <div className="grid gap-3 md:grid-cols-2">
+              {publicProofs.map((proof) => (
+                <ProofCard key={proof.title} {...proof} />
+              ))}
+            </div>
+            <div className="rounded-[var(--r-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="micro-label">Amoy contracts</p>
+                  <h3 className="mt-1 font-semibold text-[color:var(--text-primary)]">Deployment references</h3>
+                </div>
+                <ExternalLinkButton href={`${amoyExplorerUrl}/address/${contractProofs[0].address}`} label="Open factory" compact />
+              </div>
+              <div className="mt-4 grid gap-2">
+                {contractProofs.map((proof) => (
+                  <ContractProof key={proof.address} {...proof} />
+                ))}
+              </div>
+            </div>
           </DocsSection>
 
           <DocsSection id="bharatmarket-101" icon={Layers3} eyebrow="Concepts" title="BharatMarket 101">
@@ -549,6 +625,53 @@ function DocFact({ label, value }: { label: string; value: string }) {
   );
 }
 
+function ProofCard({ title, href, body }: { title: string; href: string; body: string }) {
+  const isExternal = href.startsWith("http");
+  const className =
+    "group rounded-[var(--r-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] p-4 transition hover:border-[color:var(--accent-border)] hover:bg-[color:var(--surface-3)]";
+  const content = (
+    <>
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="font-semibold text-[color:var(--text-primary)]">{title}</h3>
+        <ExternalLink className="h-4 w-4 text-[color:var(--text-tertiary)] transition group-hover:text-[color:var(--accent)]" />
+      </div>
+      <p className="mt-3 text-sm leading-6 text-[color:var(--text-secondary)]">{body}</p>
+    </>
+  );
+
+  if (isExternal) {
+    return (
+      <a href={href} target="_blank" rel="noreferrer" className={className}>
+        {content}
+      </a>
+    );
+  }
+
+  return (
+    <Link href={href} className={className}>
+      {content}
+    </Link>
+  );
+}
+
+function ContractProof({ label, address }: { label: string; address: string }) {
+  return (
+    <a
+      href={`${amoyExplorerUrl}/address/${address}`}
+      target="_blank"
+      rel="noreferrer"
+      className="grid gap-2 rounded-[var(--r-md)] border border-[color:var(--border-subtle)] bg-[rgba(7,7,13,0.3)] px-3 py-3 transition hover:border-[color:var(--accent-border)] sm:grid-cols-[150px_minmax(0,1fr)_auto]"
+    >
+      <span className="font-semibold text-[color:var(--text-primary)]">{label}</span>
+      <code className="break-all font-mono text-xs text-[color:var(--text-secondary)]">{address}</code>
+      <span className="inline-flex items-center gap-1 text-xs font-semibold text-[color:var(--accent)]">
+        Verify
+        <ExternalLink className="h-3.5 w-3.5" />
+      </span>
+    </a>
+  );
+}
+
 function LinkButton({ href, label }: { href: string; label: string }) {
   return (
     <Link
@@ -558,5 +681,31 @@ function LinkButton({ href, label }: { href: string; label: string }) {
       {label}
       <ArrowRight className="h-4 w-4" />
     </Link>
+  );
+}
+
+function ExternalLinkButton({
+  href,
+  label,
+  compact = false
+}: {
+  href: string;
+  label: string;
+  compact?: boolean;
+}) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className={
+        compact
+          ? "inline-flex items-center gap-2 rounded-[var(--r-md)] border border-[color:var(--border-default)] px-3 py-2 text-xs font-semibold text-[color:var(--text-primary)] transition hover:border-[color:var(--accent-border)]"
+          : "inline-flex items-center gap-2 rounded-[var(--r-md)] border border-[color:var(--accent-border)] bg-[color:var(--accent-dim)] px-3 py-2 text-sm font-medium text-[color:var(--text-primary)] transition hover:bg-[color:var(--surface-3)]"
+      }
+    >
+      {label}
+      <ExternalLink className="h-4 w-4" />
+    </a>
   );
 }
