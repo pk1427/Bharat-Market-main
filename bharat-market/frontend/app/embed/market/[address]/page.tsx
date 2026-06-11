@@ -7,6 +7,8 @@ import { Panel } from "@/components/ui/panel";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
+export const dynamic = "force-dynamic";
+
 export default async function EmbedMarketPage({
   params
 }: {
