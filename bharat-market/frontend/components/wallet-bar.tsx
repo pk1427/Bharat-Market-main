@@ -94,7 +94,10 @@ export function WalletBar() {
   const onExpectedNetwork = chainId === polygonAmoy.id;
   const networkLabel = onExpectedNetwork ? "Amoy" : "Wrong network";
 
-  if (pathname.startsWith("/embed")) {
+  const embeddedWidgetRoute =
+    pathname === "/embed/board" || pathname.startsWith("/embed/market/");
+
+  if (embeddedWidgetRoute) {
     return null;
   }
 
