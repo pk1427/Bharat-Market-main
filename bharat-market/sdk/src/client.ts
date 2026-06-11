@@ -18,7 +18,7 @@ import type {
   WebhookEventType,
   WebhookListResponse,
   PortfolioResponse
-} from "./types";
+} from "./types.js";
 
 export type BharatMarketClientOptions = {
   baseUrl: string;
