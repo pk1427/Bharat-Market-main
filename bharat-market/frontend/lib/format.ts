@@ -1,5 +1,7 @@
 import { formatUnits } from "viem";
 
+const BHARATMARKET_TIME_ZONE = "Asia/Kolkata";
+
 export function formatPercent(value: bigint) {
   const numeric = Number(value) / 1e16;
   return `${numeric.toFixed(1)}%`;
@@ -36,7 +38,19 @@ export function formatShares(value: bigint) {
 }
 
 export function formatTimestamp(value: bigint) {
-  return new Date(Number(value) * 1000).toLocaleString();
+  return formatDateTimeIst(new Date(Number(value) * 1000));
+}
+
+export function formatDateTimeIst(value: Date | number) {
+  const date = value instanceof Date ? value : new Date(value);
+  return `${date.toLocaleString("en-IN", {
+    timeZone: BHARATMARKET_TIME_ZONE,
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true
+  })} IST`;
 }
 
 export function shortenAddress(address: string) {

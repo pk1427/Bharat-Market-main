@@ -2,6 +2,7 @@ import type { Address, PublicClient } from "viem";
 import { erc20Abi } from "viem";
 
 import { marketAbi, marketFactoryAbi, outcomeTokenAbi } from "@/lib/abis";
+import { formatDateTimeIst } from "@/lib/format";
 import { getCategoryLabel } from "@/lib/market-meta";
 import {
   decodeOracleMetadata,
@@ -580,12 +581,7 @@ function getStatusLabel(status: MarketStatus) {
 }
 
 function getEndTimeLabel(endTime: bigint) {
-  return new Date(Number(endTime) * 1000).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit"
-  });
+  return formatDateTimeIst(new Date(Number(endTime) * 1000));
 }
 
 function deriveQuestion(oracleType: string, oracleQuery: string, marketAddress: Address) {

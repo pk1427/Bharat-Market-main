@@ -2,6 +2,8 @@
 
 import { toast } from "sonner";
 
+const SETTLED_TX_TOAST_DURATION_MS = 12_000;
+
 export function getExplorerTxUrl(hash: string) {
   return `https://amoy.polygonscan.com/tx/${hash}`;
 }
@@ -48,19 +50,23 @@ export function settleTxToast({
   if (status === "success") {
     toast.success(successLabel, {
       id,
-      description: <ExplorerLink hash={hash} />
+      description: <ExplorerLink hash={hash} />,
+      duration: SETTLED_TX_TOAST_DURATION_MS
     });
     return;
   }
 
   toast.error(errorLabel, {
     id,
-    description: <ExplorerLink hash={hash} />
+    description: <ExplorerLink hash={hash} />,
+    duration: SETTLED_TX_TOAST_DURATION_MS
   });
 }
 
 export function failTxToast(message: string) {
-  toast.error(message);
+  toast.error(message, {
+    duration: SETTLED_TX_TOAST_DURATION_MS
+  });
 }
 
 export function dismissTxToast(id: string | number | null) {

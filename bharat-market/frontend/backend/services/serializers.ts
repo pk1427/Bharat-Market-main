@@ -6,6 +6,7 @@ import type {
   PositionSide
 } from "@/types/product";
 import type { MarketDetailDto, MarketStatus, MarketSummaryDto } from "@/lib/market-data";
+import { formatDateTimeIst } from "@/lib/format";
 import { getCategoryLabel } from "@/lib/market-meta";
 import {
   decodeOracleMetadata,
@@ -30,12 +31,7 @@ export function getStatusLabel(status: MarketStatus) {
 }
 
 export function getEndTimeLabel(endTime: Date) {
-  return endTime.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit"
-  });
+  return formatDateTimeIst(endTime);
 }
 
 export function toOutcomeNumber(outcome: "PENDING" | "YES" | "NO" | string) {

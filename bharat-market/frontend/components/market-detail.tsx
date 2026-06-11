@@ -39,6 +39,7 @@ import { syncMarketAfterTransaction } from "@/lib/market-sync";
 import { useIndexerStatus } from "@/hooks/use-indexer-status";
 import {
   formatPercent,
+  formatDateTimeIst,
   formatProbabilityNumber,
   formatShares,
   formatTimestamp,
@@ -606,12 +607,7 @@ function formatSettlementObservedAt(value?: string | null) {
     return "Awaiting fulfillment";
   }
 
-  return new Date(value).toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit"
-  });
+  return formatDateTimeIst(new Date(value));
 }
 
 function MetricPanel({
