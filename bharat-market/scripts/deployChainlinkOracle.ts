@@ -44,6 +44,35 @@ async function main() {
   const oracleAddress = await oracle.getAddress();
   console.log("ChainlinkFunctionsOracle :", oracleAddress);
 
+  const secretsSlotId = Number(process.env.CHAINLINK_SECRETS_SLOT_ID ?? "0");
+  const secretsVersion = Number(process.env.CHAINLINK_SECRETS_VERSION ?? "0");
+  if (Number.isFinite(secretsVersion) && secretsVersion > 0) {
+    const tx = await oracle.setDonHostedSecrets(secretsSlotId, secretsVersion);
+    console.log("Secrets config tx       :", tx.hash);
+    await tx.wait();
+    console.log(`DON-hosted secrets      : slot ${secretsSlotId}, version ${secretsVersion}`);
+  } else {
+    console.log("DON-hosted secrets      : disabled (set CHAINLINK_SECRETS_VERSION to enable)");
+  }
+
+  if (process.env.CRICAPI_KEY) {
+    const tx = await oracle.setCricApiKey(process.env.CRICAPI_KEY);
+    console.log("CricAPI key config tx   :", tx.hash);
+    await tx.wait();
+    console.log("CricAPI key fallback    : configured");
+  } else {
+    console.log("CricAPI key fallback    : disabled (set CRICAPI_KEY to enable)");
+  }
+
+  if (process.env.CRICKET_RELAY_URL) {
+    const tx = await oracle.setCricketRelayUrl(process.env.CRICKET_RELAY_URL);
+    console.log("Cricket relay config tx :", tx.hash);
+    await tx.wait();
+    console.log("Cricket relay fallback  : configured");
+  } else {
+    console.log("Cricket relay fallback  : disabled (set CRICKET_RELAY_URL to enable)");
+  }
+
   const marketOracle = await ethers.getContractAt("MarketOracle", marketOracleAddress);
   const authorized = await marketOracle.authorizedCallers(oracleAddress);
   if (!authorized) {

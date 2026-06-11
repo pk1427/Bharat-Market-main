@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
-import { decodeEventLog } from "viem";
+import { decodeEventLog, hexToString, isHex } from "viem";
 import type { Address, PublicClient } from "viem";
 
 import { getBlockTimestamp } from "@/backend/indexer/blocks";
@@ -664,6 +664,75 @@ async function syncOracleEvents(
         }
       });
 
+      const timestamp = await getBlockTimestamp(publicClient, log.blockNumber);
+      const requestId = (args.requestId as string | null | undefined) ?? null;
+      const provider = (args.provider as string | null | undefined) || market.oracleProvider || null;
+      const externalId = (args.externalId as string | null | undefined) || market.oracleExternalId || null;
+      const settlementPrice = args.settlementPriceE8 !== undefined ? BigInt(args.settlementPriceE8) : null;
+      const outcome = args.outcome !== undefined ? Number(args.outcome) : null;
+
+      if (log.eventName === "ResolutionRequested") {
+        await prisma.oracleResolutionAudit.updateMany({
+          where: {
+            marketId: market.id,
+            requestTxHash: log.transactionHash,
+            status: "REQUESTED"
+          },
+          data: {
+            chainlinkRequestId: requestId
+          }
+        });
+      }
+
+      if (log.eventName === "ResolutionFailed") {
+        const errorMessage = decodeOracleErrorData(args.errorData as string | null | undefined);
+        const auditMatch = requestId
+          ? [{ chainlinkRequestId: requestId }, { status: "REQUESTED", completedAt: null }]
+          : [{ status: "REQUESTED", completedAt: null }];
+        const updated = await prisma.oracleResolutionAudit.updateMany({
+          where: {
+            marketId: market.id,
+            OR: auditMatch
+          },
+          data: {
+            status: "FAILED",
+            error: errorMessage,
+            fulfillmentTxHash: log.transactionHash,
+            chainlinkRequestId: requestId,
+            completedAt: timestamp
+          }
+        });
+
+        if (updated.count === 0) {
+          await prisma.oracleResolutionAudit.create({
+            data: {
+              marketId: market.id,
+              provider: provider || "unknown",
+              marketType: market.oracleMarketType || "unknown",
+              externalId,
+              settlementRule: market.settlementRule || "Oracle settlement",
+              verificationSource: market.verificationSource || "Chainlink Functions",
+              fallbackSource: market.fallbackSource,
+              status: "FAILED",
+              error: errorMessage,
+              fulfillmentTxHash: log.transactionHash,
+              chainlinkRequestId: requestId,
+              requestedAt: timestamp,
+              completedAt: timestamp
+            }
+          });
+        }
+
+        await prisma.market.update({
+          where: { id: market.id },
+          data: {
+            settlementObservedAt: timestamp,
+            settlementSummary: `Oracle request failed: ${errorMessage}`,
+            lastActivityAt: timestamp
+          }
+        });
+      }
+
       const eventType =
         log.eventName === "ResolutionRequested"
           ? "oracle.requested"
@@ -678,27 +747,22 @@ async function syncOracleEvents(
         payload: {
           eventType,
           sourceEventKey: eventKey(log.transactionHash, log.logIndex),
-          timestamp: (await getBlockTimestamp(publicClient, log.blockNumber)).toISOString(),
+          timestamp: timestamp.toISOString(),
           marketAddress: marketAddress.toLowerCase(),
           question: market.question,
           txHash: log.transactionHash,
           blockNumber: log.blockNumber.toString(),
-          requestId: (args.requestId as string | null | undefined) ?? null,
-          provider: (args.provider as string | null | undefined) || market.oracleProvider || null,
-          externalId: (args.externalId as string | null | undefined) || market.oracleExternalId || null,
+          requestId,
+          provider,
+          externalId,
           settlementPriceE8:
             args.settlementPriceE8 !== undefined ? BigInt(args.settlementPriceE8).toString() : null,
-          outcome: args.outcome !== undefined ? Number(args.outcome) : null,
+          outcome,
           errorData: (args.errorData as string | null | undefined) ?? null
         }
       });
 
       if (log.eventName === "ResolutionFulfilled") {
-        const timestamp = await getBlockTimestamp(publicClient, log.blockNumber);
-        const provider = (args.provider as string | null | undefined) || market.oracleProvider || null;
-        const externalId = (args.externalId as string | null | undefined) || market.oracleExternalId || null;
-        const settlementPrice = args.settlementPriceE8 !== undefined ? BigInt(args.settlementPriceE8) : null;
-        const outcome = args.outcome !== undefined ? Number(args.outcome) : null;
         const outcomeLabel = outcome === 1 ? "YES" : outcome === 2 ? "NO" : "PENDING";
         const summary = provider
           ? settlementPrice
@@ -725,12 +789,31 @@ async function syncOracleEvents(
         });
 
         if (!existingAudit) {
-          await prisma.oracleResolutionAudit.create({
-            data: {
+          const auditMatch = requestId
+            ? [{ chainlinkRequestId: requestId }, { status: "REQUESTED", completedAt: null }]
+            : [{ status: "REQUESTED", completedAt: null }];
+          const updated = await prisma.oracleResolutionAudit.updateMany({
+            where: {
               marketId: market.id,
-              provider: provider || "unknown",
-              marketType: market.oracleMarketType || "unknown",
-              externalId,
+              OR: auditMatch
+            },
+            data: {
+              status: "FULFILLED",
+              normalizedOutcome: outcome,
+              settlementPrice,
+              fulfillmentTxHash: log.transactionHash,
+              chainlinkRequestId: requestId,
+              completedAt: timestamp
+            }
+          });
+
+          if (updated.count === 0) {
+            await prisma.oracleResolutionAudit.create({
+              data: {
+                marketId: market.id,
+                provider: provider || "unknown",
+                marketType: market.oracleMarketType || "unknown",
+                externalId,
               settlementRule: market.settlementRule || "Oracle settlement",
               verificationSource: market.verificationSource || "Chainlink Functions",
               fallbackSource: market.fallbackSource,
@@ -747,11 +830,12 @@ async function syncOracleEvents(
                     provider
                   },
               fulfillmentTxHash: log.transactionHash,
-              chainlinkRequestId: (args.requestId as string | null | undefined) ?? null,
-              requestedAt: timestamp,
-              completedAt: timestamp
-            }
-          });
+              chainlinkRequestId: requestId,
+                requestedAt: timestamp,
+                completedAt: timestamp
+              }
+            });
+          }
         }
       }
     }
@@ -767,6 +851,18 @@ function formatPriceE8(value: bigint) {
   const fraction = value % 100_000_000n;
   const trimmedFraction = fraction.toString().padStart(8, "0").replace(/0+$/, "");
   return trimmedFraction ? `${whole.toString()}.${trimmedFraction}` : whole.toString();
+}
+
+function decodeOracleErrorData(value?: string | null) {
+  if (!value || !isHex(value)) {
+    return "Unknown Chainlink Functions error.";
+  }
+
+  try {
+    return hexToString(value).replace(/\0/g, "").trim() || value;
+  } catch {
+    return value;
+  }
 }
 
 async function syncMarketEvents(

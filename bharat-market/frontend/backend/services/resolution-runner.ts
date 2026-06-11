@@ -113,7 +113,9 @@ export async function runResolutionSync(reason: "manual" | "cron" | "loop" = "ma
     const recentRequest = await prisma.oracleResolutionAudit.findFirst({
       where: {
         marketId: market.id,
-        status: "REQUESTED",
+        status: {
+          in: ["REQUESTED", "FAILED"]
+        },
         requestedAt: {
           gte: new Date(Date.now() - getRetryCooldownMs())
         }
@@ -124,6 +126,17 @@ export async function runResolutionSync(reason: "manual" | "cron" | "loop" = "ma
     });
 
     if (recentRequest) {
+      if (recentRequest.status === "FAILED") {
+        results.push({
+          market: market.marketAddress,
+          status: "chainlink_failed",
+          auditId: recentRequest.id,
+          txHash: recentRequest.fulfillmentTxHash ?? recentRequest.requestTxHash,
+          reason: recentRequest.error ?? "Recent Chainlink request failed; waiting before retrying."
+        });
+        continue;
+      }
+
       results.push({
         market: market.marketAddress,
         status: "cooldown",

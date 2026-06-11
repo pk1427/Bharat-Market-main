@@ -60,6 +60,19 @@ contract ChainlinkFunctionsOracle is FunctionsClient, Ownable {
     /// @notice Gas limit for the Chainlink callback
     uint32 public constant CALLBACK_GAS_LIMIT = 300_000;
 
+    /// @notice DON-hosted encrypted secrets reference used by provider API requests.
+    /// @dev version=0 disables secrets attachment for providers that do not need secrets.
+    uint8 public donHostedSecretsSlotId;
+    uint64 public donHostedSecretsVersion;
+
+    /// @notice Optional testnet/staging CricAPI key injected into the request source.
+    /// @dev Prefer DON-hosted secrets for production. This keeps Amoy cricket testing unblocked.
+    string public cricApiKey;
+
+    /// @notice Optional relay URL used when Chainlink DON cannot reach CricAPI directly.
+    /// @dev The relay must return the same minimal CricAPI match_info shape under `data`.
+    string public cricketRelayUrl;
+
     /// @notice MarketOracle — all resolutions must go through here
     address public marketOracle;
 
@@ -98,6 +111,9 @@ contract ChainlinkFunctionsOracle is FunctionsClient, Ownable {
     event MarketOracleUpdated(address newOracle);
     event SubscriptionUpdated(uint64 newSubId);
     event DonIdUpdated(bytes32 newDonId);
+    event DonHostedSecretsUpdated(uint8 slotId, uint64 version);
+    event CricApiKeyUpdated(bool configured);
+    event CricketRelayUrlUpdated(bool configured);
 
     // -----------------------------------------------
     // Constructor
@@ -152,6 +168,10 @@ contract ChainlinkFunctionsOracle is FunctionsClient, Ownable {
 
         // Inline JS source — calls the oracle script stored in this contract
         req.initializeRequestForInlineJavaScript(_buildOracleSource());
+
+        if (donHostedSecretsVersion > 0) {
+            req.addDONHostedSecrets(donHostedSecretsSlotId, donHostedSecretsVersion);
+        }
 
         // Pass oracleType and oracleQuery as args so the JS can branch on them
         string[] memory args = new string[](2);
@@ -247,11 +267,13 @@ contract ChainlinkFunctionsOracle is FunctionsClient, Ownable {
     ///      args[1] = oracleQuery (e.g. "bitcoin_price", "csk_vs_mi")
     ///
     ///      The script must return: Functions.encodeUint256(1) or (2)
-    function _buildOracleSource() internal pure returns (string memory) {
-        return
+    function _buildOracleSource() internal view returns (string memory) {
+        return string.concat(
             "const oracleType  = args[0];"
             "const oracleQuery = args[1];"
             "const PACK = 1000000000000000000n;"
+            "const CRICAPI_KEY_FALLBACK = '", cricApiKey, "';"
+            "const CRICKET_RELAY_URL = '", cricketRelayUrl, "';"
             ""
             "function b64Decode(input){"
             "  const chars='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';"
@@ -298,10 +320,18 @@ contract ChainlinkFunctionsOracle is FunctionsClient, Ownable {
             "  settlementPriceE8 = Math.round(price * 100000000);"
             ""
             "} else if (meta && meta.category === 'cricket') {"
-            "  const apiKey = secrets.CRICAPI_KEY;"
-            "  const url = `https://api.cricapi.com/v1/match_info?apikey=${apiKey}&id=${meta.matchId}`;"
-            "  const res = await Functions.makeHttpRequest({ url });"
-            "  if (res.error || !res.data?.data) throw Error('CricAPI fetch failed');"
+            "  const apiKey = (typeof secrets !== 'undefined' && secrets.CRICAPI_KEY) ? secrets.CRICAPI_KEY : CRICAPI_KEY_FALLBACK;"
+            "  if (!apiKey) throw Error('CricAPI key missing');"
+            "  const headers = { accept: 'application/json', 'user-agent': 'BharatMarket-Chainlink-Oracle/1.0' };"
+            "  const url = `https://api.cricapi.com/v1/match_info?apikey=${encodeURIComponent(apiKey)}&id=${encodeURIComponent(meta.matchId)}`;"
+            "  let res = await Functions.makeHttpRequest({ url, timeout: 9000, headers });"
+            "  if (res.error && CRICKET_RELAY_URL) {"
+            "    const sep = CRICKET_RELAY_URL.includes('?') ? '&' : '?';"
+            "    const relayUrl = `${CRICKET_RELAY_URL}${sep}matchId=${encodeURIComponent(meta.matchId)}`;"
+            "    res = await Functions.makeHttpRequest({ url: relayUrl, timeout: 9000, headers });"
+            "  }"
+            "  if (res.error) throw Error('CricAPI fetch failed: ' + JSON.stringify(res.error).slice(0, 120));"
+            "  if (!res.data?.data) throw Error('CricAPI response missing match data');"
             "  const match = res.data.data;"
             "  if (!match.matchEnded || !match.matchWinner) throw Error('Match not completed');"
             "  const winner = String(match.matchWinner).toUpperCase();"
@@ -348,7 +378,8 @@ contract ChainlinkFunctionsOracle is FunctionsClient, Ownable {
             "  throw Error('Unknown oracleType: ' + oracleType);"
             "}"
             ""
-            "return Functions.encodeUint256(settlementPriceE8 > 0 ? (BigInt(outcome) * PACK + BigInt(settlementPriceE8)) : BigInt(outcome));";
+            "return Functions.encodeUint256(settlementPriceE8 > 0 ? (BigInt(outcome) * PACK + BigInt(settlementPriceE8)) : BigInt(outcome));"
+        );
     }
 
     function _startsWith(string memory value, string memory prefix) internal pure returns (bool) {
@@ -385,6 +416,22 @@ contract ChainlinkFunctionsOracle is FunctionsClient, Ownable {
     function setDonId(bytes32 _donId) external onlyOwner {
         donId = _donId;
         emit DonIdUpdated(_donId);
+    }
+
+    function setDonHostedSecrets(uint8 slotId, uint64 version) external onlyOwner {
+        donHostedSecretsSlotId = slotId;
+        donHostedSecretsVersion = version;
+        emit DonHostedSecretsUpdated(slotId, version);
+    }
+
+    function setCricApiKey(string calldata apiKey) external onlyOwner {
+        cricApiKey = apiKey;
+        emit CricApiKeyUpdated(bytes(apiKey).length > 0);
+    }
+
+    function setCricketRelayUrl(string calldata relayUrl) external onlyOwner {
+        cricketRelayUrl = relayUrl;
+        emit CricketRelayUrlUpdated(bytes(relayUrl).length > 0);
     }
 
     /// @notice Emergency: clear a stuck pending request without resolving
