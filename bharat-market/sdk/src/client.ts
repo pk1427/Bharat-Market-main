@@ -14,6 +14,9 @@ import type {
   MarketResponse,
   MarketsResponse,
   OracleCatalogResponse,
+  WebhookCreateResponse,
+  WebhookEventType,
+  WebhookListResponse,
   PortfolioResponse
 } from "./types";
 
@@ -62,6 +65,34 @@ export class BharatMarketClient {
 
   async getOracleCatalog(): Promise<OracleCatalogResponse> {
     return this.request<OracleCatalogResponse>(`${this.baseUrl}/api/public/oracles`);
+  }
+
+  async listWebhooks(owner?: string): Promise<WebhookListResponse> {
+    const url = new URL(`${this.baseUrl}/api/webhooks`);
+    if (owner) {
+      url.searchParams.set("owner", owner);
+    }
+    return this.request<WebhookListResponse>(url);
+  }
+
+  async createWebhook(input: {
+    owner?: string;
+    url: string;
+    events: WebhookEventType[];
+  }): Promise<WebhookCreateResponse> {
+    const response = await this.fetchImpl(`${this.baseUrl}/api/webhooks`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify(input)
+    });
+
+    if (!response.ok) {
+      throw new Error(`BharatMarket webhook request failed with ${response.status}`);
+    }
+
+    return (await response.json()) as WebhookCreateResponse;
   }
 
   async createMarket(client: ContractClientOptions, params: { question: string; endTime: bigint; oracleType: string; oracleQuery: string }) {

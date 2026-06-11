@@ -137,3 +137,34 @@ export type OracleCatalogResponse = {
   categories: Array<OracleProviderInfo["category"]>;
   supportedMarketTypes: Record<string, string[]>;
 };
+
+export type WebhookEventType =
+  | "market.created"
+  | "market.updated"
+  | "trade.executed"
+  | "liquidity.added"
+  | "liquidity.removed"
+  | "market.resolved"
+  | "market.redeemed"
+  | "oracle.requested"
+  | "oracle.fulfilled"
+  | "oracle.failed";
+
+export type WebhookSubscription = {
+  id: string;
+  owner: string | null;
+  url: string;
+  events: WebhookEventType[];
+  active: boolean;
+  createdAt: string;
+  updatedAt?: string;
+};
+
+export type WebhookListResponse = {
+  subscriptions: WebhookSubscription[];
+};
+
+export type WebhookCreateResponse = {
+  subscription: WebhookSubscription;
+  secret: string;
+};
