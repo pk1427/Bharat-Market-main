@@ -5,6 +5,7 @@ import { polygonAmoy } from "viem/chains";
 import { getPrismaClient } from "@/backend/db/client";
 import { getIndexerPublicClient } from "@/backend/indexer/client";
 import { evaluateOracleMetadata } from "@/backend/oracles/registry";
+import { OracleProviderError } from "@/backend/oracles/types";
 import { chainlinkFunctionsOracleAbi, marketAbi } from "@/lib/abis";
 import { getRequiredAddresses } from "@/lib/contracts";
 import { decodeOracleMetadata } from "@/lib/oracle-metadata";
@@ -30,15 +31,7 @@ export async function runResolutionSync(reason: "manual" | "cron" | "loop" = "ma
       resolved: false,
       endTime: {
         lte: new Date()
-      },
-      OR: [
-        {
-          oracleProvider: "coingecko"
-        },
-        {
-          oracleType: "crypto"
-        }
-      ]
+      }
     },
     orderBy: {
       endTime: "asc"
@@ -92,11 +85,11 @@ export async function runResolutionSync(reason: "manual" | "cron" | "loop" = "ma
     }
 
     const metadata = decodeOracleMetadata(market.oracleQuery);
-    if (!metadata || metadata.category !== "crypto" || metadata.provider !== "coingecko") {
+    if (!metadata || (metadata.category !== "crypto" && metadata.category !== "cricket")) {
       results.push({
         market: market.marketAddress,
         status: "skipped",
-        reason: "Not a CoinGecko crypto market."
+        reason: "Not an auto-resolvable crypto or cricket market."
       });
       continue;
     }
@@ -194,11 +187,20 @@ export async function runResolutionSync(reason: "manual" | "cron" | "loop" = "ma
         txHash: hash
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown CoinGecko resolution error.";
+      if (isPendingProviderError(error)) {
+        results.push({
+          market: market.marketAddress,
+          status: "provider_pending",
+          reason: error instanceof Error ? error.message : "Provider data is not ready yet."
+        });
+        continue;
+      }
+
+      const message = error instanceof Error ? error.message : "Unknown oracle resolution error.";
       await prisma.oracleResolutionAudit.create({
         data: {
           marketId: market.id,
-          provider: "coingecko",
+          provider: metadata.provider,
           marketType: metadata.marketType,
           externalId: metadata.externalId,
           settlementRule: metadata.settlementRule,
@@ -241,4 +243,8 @@ function getRetryCooldownMs() {
 
 function toMarketOutcome(outcome: number) {
   return outcome === 1 ? "YES" : outcome === 2 ? "NO" : "PENDING";
+}
+
+function isPendingProviderError(error: unknown) {
+  return error instanceof OracleProviderError && error.code === "MARKET_NOT_SETTLED";
 }

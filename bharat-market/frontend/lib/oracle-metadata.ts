@@ -170,7 +170,14 @@ export function getOracleProviderLabel(metadata: OracleMetadata | null, oracleTy
     return "CoinGecko + Chainlink Functions";
   }
 
-  const provider = metadata.provider
+  const providerLabels: Record<string, string> = {
+    cricapi: "CricAPI",
+    "api-sports": "API Sports",
+    "the-odds-api": "The Odds API",
+    newsapi: "NewsAPI",
+    staging: "Staging"
+  };
+  const provider = providerLabels[metadata.provider] ?? metadata.provider
     .split("-")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");

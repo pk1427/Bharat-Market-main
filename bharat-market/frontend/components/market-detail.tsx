@@ -196,13 +196,14 @@ export function MarketDetail({ address }: { address: string }) {
   const sentiment = yesPercent >= 60 ? "Bullish YES" : yesPercent <= 40 ? "Defensive NO" : "Balanced";
   const dominance = yesPercent >= 50 ? "YES" : "NO";
   const marketClosed = market.status !== "active";
+  const autoManaged = market.oracleMetadata?.category === "crypto" || market.oracleMetadata?.category === "cricket";
   const marketStateCopy =
     market.status === "active"
       ? "Trading is open and BharatMarket is streaming pricing, liquidity depth, and wallet exposure."
       : market.status === "awaiting"
         ? "Trading is closed. The contract is waiting for oracle resolution and redemption unlocks once the outcome is finalized."
         : "This market has resolved. Final balances, winning outcome, and redemption state are shown below.";
-  const oracleSettled = Boolean(market.oracleMetadata?.settlementPrice);
+  const oracleSettled = market.resolved || Boolean(market.oracleMetadata?.settlementPrice);
   const oracleTrustLabel = oracleSettled
     ? "Settlement verified"
     : market.status === "awaiting"
@@ -378,9 +379,15 @@ export function MarketDetail({ address }: { address: string }) {
 
             <div className="border-t border-white/6 bg-black/15 p-5 lg:border-l lg:border-t-0">
               <div className="rounded-[24px] border border-mint/15 bg-mint/[0.05] p-5">
-                <p className="text-[10px] uppercase tracking-[0.28em] text-mint">Fetched Settlement Price</p>
+                <p className="text-[10px] uppercase tracking-[0.28em] text-mint">
+                  {market.oracleMetadata.settlementPrice ? "Fetched Settlement Price" : "Fetched Settlement Result"}
+                </p>
                 <p className="mt-3 font-mono text-4xl font-semibold text-white">
-                  {formatSettlementPrice(market.oracleMetadata.settlementPrice)}
+                  {market.oracleMetadata.settlementPrice
+                    ? formatSettlementPrice(market.oracleMetadata.settlementPrice)
+                    : market.resolved
+                      ? market.winningLabel
+                      : "Awaiting fulfillment"}
                 </p>
                 <p className="mt-2 text-xs text-slate-400">
                   Observed {formatSettlementObservedAt(market.oracleMetadata.settlementObservedAt)}
@@ -542,6 +549,7 @@ export function MarketDetail({ address }: { address: string }) {
             marketResolved={market.resolved}
             endTime={market.endTime}
             pendingRequest={detail.pendingRequest}
+            autoManaged={autoManaged}
             onComplete={() => void detail.refresh(true)}
           />
         </div>

@@ -20,6 +20,7 @@ export function ResolutionPanel({
   marketResolved,
   endTime,
   pendingRequest,
+  autoManaged = false,
   onComplete
 }: {
   marketAddress: `0x${string}`;
@@ -27,6 +28,7 @@ export function ResolutionPanel({
   marketResolved: boolean;
   endTime: bigint;
   pendingRequest: `0x${string}` | null;
+  autoManaged?: boolean;
   onComplete: () => void;
 }) {
   const { address: account } = useAccount();
@@ -198,6 +200,12 @@ export function ResolutionPanel({
           state="success"
           title="Oracle settlement complete"
           detail="No further resolution request is needed for this market."
+        />
+      ) : autoManaged ? (
+        <TxStatusNotice
+          state="pending"
+          title="Autonomous settlement enabled"
+          detail="BharatMarket's resolution worker handles the Chainlink request automatically once expiry and provider data are ready."
         />
       ) : (
         <ActionButton

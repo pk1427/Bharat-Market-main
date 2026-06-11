@@ -132,10 +132,16 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
     createForm.category === "cricket" ? "sports" : createForm.category;
   const generatedQuestion = oracleMetadata ? buildOracleQuestion(oracleMetadata) : "";
   const questionToCreate = createForm.question.trim() || generatedQuestion;
-  const categoryResolutionReady = createForm.category === "crypto";
+  const categoryResolutionReady = createForm.category === "crypto" || createForm.category === "cricket";
+  const settlementRouteLabel =
+    createForm.category === "crypto"
+      ? "CoinGecko -> Chainlink -> on-chain resolution"
+      : createForm.category === "cricket"
+        ? "CricAPI -> Chainlink -> on-chain resolution"
+        : "Provider adapter not enabled for production settlement";
   const creationBlockedReason =
-    structuredOracleCreationEnabled && !categoryResolutionReady
-      ? "Only CoinGecko crypto markets are enabled for autonomous settlement right now."
+    structuredOracleCreationEnabled && createForm.category === "election"
+      ? "Election markets are not production-enabled yet."
       : null;
 
   useEffect(() => {
@@ -458,7 +464,8 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
             <CategoryButton
               active={createForm.category === "cricket"}
               title="Cricket"
-              subtitle="Provider slot"
+              subtitle="CricAPI live"
+              ready
               onClick={() => setCreateForm((current) => ({ ...current, category: "cricket" }))}
             />
             <CategoryButton
@@ -501,7 +508,7 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
 
           {creationBlockedReason ? (
             <div className="rounded-[18px] border border-gold/20 bg-gold/10 p-4 text-sm leading-6 text-gold">
-              {creationBlockedReason} Select Crypto to create an end-to-end resolvable market.
+              {creationBlockedReason} Select Crypto or Cricket to create an end-to-end resolvable market.
             </div>
           ) : null}
 
@@ -625,7 +632,7 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
                 <p className="text-[10px] uppercase tracking-[0.16em]">Settlement Route</p>
               </div>
               <p className="mt-3 text-sm text-white">
-                {categoryResolutionReady ? "CoinGecko -> Chainlink -> on-chain resolution" : "Provider adapter not enabled for production settlement"}
+                {settlementRouteLabel}
               </p>
             </div>
           </div>
@@ -734,13 +741,23 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
               <TrustStep
                 icon={ShieldCheck}
                 title="2. Provider verification"
-                detail={categoryResolutionReady ? "CoinGecko market_chart/range is sampled after expiry." : "Provider not production-enabled yet."}
+                detail={
+                  createForm.category === "crypto"
+                    ? "CoinGecko market_chart/range is sampled after expiry."
+                    : createForm.category === "cricket"
+                      ? "CricAPI match_info is sampled after the fixture ends and the winner is normalized deterministically."
+                      : "Provider not production-enabled yet."
+                }
                 active={categoryResolutionReady}
               />
               <TrustStep
                 icon={LockKeyhole}
                 title="3. Chainlink settlement"
-                detail="Chainlink Functions returns YES/NO plus the fetched settlement price for indexing."
+                detail={
+                  createForm.category === "crypto"
+                    ? "Chainlink Functions returns YES/NO plus the fetched settlement price for indexing."
+                    : "Chainlink Functions returns YES/NO plus the fetched match result for indexing."
+                }
                 active={categoryResolutionReady}
               />
             </div>

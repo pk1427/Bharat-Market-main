@@ -39,10 +39,18 @@ export async function listWebhookSubscriptions(owner?: string | null) {
     return [];
   }
 
-  return prisma.webhookSubscription.findMany({
-    where: owner ? { owner: owner.toLowerCase() } : undefined,
-    orderBy: { createdAt: "desc" }
-  });
+  try {
+    return await prisma.webhookSubscription.findMany({
+      where: owner ? { owner: owner.toLowerCase() } : undefined,
+      orderBy: { createdAt: "desc" }
+    });
+  } catch (error) {
+    if (isMissingWebhookTableError(error)) {
+      return [];
+    }
+
+    throw error;
+  }
 }
 
 export async function createWebhookSubscription(input: CreateWebhookSubscriptionInput) {
@@ -74,17 +82,26 @@ export async function queueWebhookEvent(params: {
   sourceEventKey: string;
   payload: WebhookPayload;
 }) {
-  const subscriptions = await params.prisma.webhookSubscription.findMany({
-    where: {
-      active: true,
-      events: {
-        has: params.eventType
+  let subscriptions: Array<{ id: string }>;
+  try {
+    subscriptions = await params.prisma.webhookSubscription.findMany({
+      where: {
+        active: true,
+        events: {
+          has: params.eventType
+        }
+      },
+      select: {
+        id: true
       }
-    },
-    select: {
-      id: true
+    });
+  } catch (error) {
+    if (isMissingWebhookTableError(error)) {
+      return 0;
     }
-  });
+
+    throw error;
+  }
 
   if (subscriptions.length === 0) {
     return 0;
@@ -125,20 +142,37 @@ export async function dispatchPendingWebhookDeliveries() {
   }
 
   const now = new Date();
-  const deliveries = await prisma.webhookDelivery.findMany({
-    where: {
-      status: "PENDING",
-      OR: [
-        { nextAttemptAt: null },
-        { nextAttemptAt: { lte: now } }
-      ]
-    },
-    include: {
-      subscription: true
-    },
-    orderBy: [{ createdAt: "asc" }],
-    take: 25
-  });
+  let deliveries: Array<
+    Prisma.WebhookDeliveryGetPayload<{
+      include: { subscription: true };
+    }>
+  >;
+  try {
+    deliveries = await prisma.webhookDelivery.findMany({
+      where: {
+        status: "PENDING",
+        OR: [
+          { nextAttemptAt: null },
+          { nextAttemptAt: { lte: now } }
+        ]
+      },
+      include: {
+        subscription: true
+      },
+      orderBy: [{ createdAt: "asc" }],
+      take: 25
+    });
+  } catch (error) {
+    if (isMissingWebhookTableError(error)) {
+      return {
+        processed: 0,
+        delivered: 0,
+        failed: 0
+      };
+    }
+
+    throw error;
+  }
 
   let delivered = 0;
   let failed = 0;
@@ -219,4 +253,13 @@ function normalizeJson(value: Prisma.JsonValue): Record<string, unknown> {
 
 function retryDelayMs(attempts: number) {
   return Math.min(30_000 * attempts, 15 * 60_000);
+}
+
+function isMissingWebhookTableError(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: string }).code === "P2021"
+  );
 }

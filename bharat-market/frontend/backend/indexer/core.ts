@@ -648,10 +648,12 @@ async function syncOracleEvents(
           provider: (args.provider as string | null | undefined) || market.oracleProvider || null,
           externalId: (args.externalId as string | null | undefined) || market.oracleExternalId || null,
           settlementPrice: args.settlementPriceE8 !== undefined ? BigInt(args.settlementPriceE8) : null,
-          observedAt: args.settlementPriceE8 !== undefined ? await getBlockTimestamp(publicClient, log.blockNumber) : null,
+          observedAt: await getBlockTimestamp(publicClient, log.blockNumber),
           summary:
-            args.settlementPriceE8 !== undefined
-              ? `${(args.provider as string | undefined) || market.oracleProvider || "oracle"} settlement price ${formatPriceE8(BigInt(args.settlementPriceE8))} USD; outcome ${Number(args.outcome) === 1 ? "YES" : Number(args.outcome) === 2 ? "NO" : "PENDING"}`
+            args.provider || market.oracleProvider
+              ? args.settlementPriceE8 !== undefined
+                ? `${(args.provider as string | undefined) || market.oracleProvider || "oracle"} settlement price ${formatPriceE8(BigInt(args.settlementPriceE8))} USD; outcome ${Number(args.outcome) === 1 ? "YES" : Number(args.outcome) === 2 ? "NO" : "PENDING"}`
+                : `${(args.provider as string | undefined) || market.oracleProvider || "oracle"} settlement completed; outcome ${Number(args.outcome) === 1 ? "YES" : Number(args.outcome) === 2 ? "NO" : "PENDING"}`
               : null,
           outcome: args.outcome !== undefined ? Number(args.outcome) : null,
           errorData: (args.errorData as string | null | undefined) ?? null,
@@ -697,17 +699,19 @@ async function syncOracleEvents(
         const externalId = (args.externalId as string | null | undefined) || market.oracleExternalId || null;
         const settlementPrice = args.settlementPriceE8 !== undefined ? BigInt(args.settlementPriceE8) : null;
         const outcome = args.outcome !== undefined ? Number(args.outcome) : null;
-        const summary =
-          settlementPrice && provider
-            ? `${provider} settlement price ${formatPriceE8(settlementPrice)} USD; outcome ${outcome === 1 ? "YES" : outcome === 2 ? "NO" : "PENDING"}`
-            : null;
+        const outcomeLabel = outcome === 1 ? "YES" : outcome === 2 ? "NO" : "PENDING";
+        const summary = provider
+          ? settlementPrice
+            ? `${provider} settlement price ${formatPriceE8(settlementPrice)} USD; outcome ${outcomeLabel}`
+            : `${provider} settlement completed; outcome ${outcomeLabel}`
+          : null;
 
         await prisma.market.update({
           where: { id: market.id },
           data: {
             settlementProvider: provider,
             settlementPrice,
-            settlementObservedAt: settlementPrice ? timestamp : null,
+            settlementObservedAt: timestamp,
             settlementSummary: summary,
             lastActivityAt: timestamp
           }
@@ -738,7 +742,10 @@ async function syncOracleEvents(
                     settlementPriceE8: settlementPrice.toString(),
                     settlementPriceUsd: formatPriceE8(settlementPrice)
                   }
-                : undefined,
+                : {
+                    settlementOutcome: outcomeLabel,
+                    provider
+                  },
               fulfillmentTxHash: log.transactionHash,
               chainlinkRequestId: (args.requestId as string | null | undefined) ?? null,
               requestedAt: timestamp,

@@ -14,7 +14,8 @@
     "indexer:market": "tsx backend/workers/index-market.ts",
     "indexer:loop": "tsx backend/workers/index-loop.ts",
     "resolution:loop": "tsx backend/workers/resolution-loop.ts",
-    "webhook:loop": "tsx backend/workers/webhook-loop.ts"
+    "webhook:loop": "tsx backend/workers/webhook-loop.ts",
+    "smoke:cricket": "tsx scripts/cricket-smoke.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.9.0",
