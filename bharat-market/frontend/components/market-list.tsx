@@ -88,20 +88,30 @@ export function MarketList({
         </div>
       ) : null}
 
-      <div className="rounded-[24px] bg-[linear-gradient(180deg,rgba(16,18,29,0.92),rgba(11,13,22,0.96))] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
-      <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
+      <div className="rounded-[var(--r-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-1)] p-4">
+        <div className="flex flex-col gap-4 border-b border-[color:var(--border-subtle)] pb-4 xl:flex-row xl:items-center xl:justify-between">
+          <div>
+            <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-[color:var(--text-tertiary)]">Protocol Board</p>
+            <h3 className="mt-2 text-xl font-semibold text-[color:var(--text-primary)]">Markets</h3>
+          </div>
+          <p className="font-mono text-xs text-[color:var(--text-tertiary)]">
+            {total} contracts indexed • {statusFilter === "all" ? "all states" : statusFilter}
+          </p>
+        </div>
+
+        <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto]">
         <label className="relative block">
           <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search by market question, category, or oracle query..."
-            className="w-full rounded-[16px] border border-white/8 bg-white/[0.04] py-3 pl-11 pr-4 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-violet-400/30"
-          />
-        </label>
+            className="w-full rounded-[var(--r-md)] border border-[color:var(--border-default)] bg-[color:var(--surface-2)] py-3 pl-11 pr-4 text-sm text-[color:var(--text-primary)] outline-none transition placeholder:text-[color:var(--text-tertiary)] focus:border-[color:var(--accent-border)] focus:ring-2 focus:ring-[color:var(--accent-dim)]"
+            />
+          </label>
 
-        <div className="flex flex-wrap gap-2">
-          <BoardFilter
+          <div className="flex flex-wrap gap-2">
+            <BoardFilter
             active={statusFilter === "all"}
             label={`All (${total})`}
             onClick={() => setStatusFilter("all")}
@@ -120,18 +130,19 @@ export function MarketList({
             active={statusFilter === "resolved"}
             label="Resolved"
             onClick={() => setStatusFilter("resolved")}
-          />
+            />
+          </div>
         </div>
       </div>
-      </div>
-      <div className="grid gap-4 xl:grid-cols-2 2xl:grid-cols-3">
+
+      <div className="space-y-2">
         {markets.map((market) => (
           <MarketCard key={market.address} market={market} />
         ))}
       </div>
 
-      <div className="flex flex-col gap-3 rounded-[20px] bg-white/[0.03] px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-slate-400">Showing {pageSummary}</p>
+      <div className="flex flex-col gap-3 rounded-[var(--r-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-1)] px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <p className="font-mono text-xs text-[color:var(--text-secondary)]">Showing {pageSummary}</p>
         <div className="flex items-center gap-2">
           <button
             type="button"

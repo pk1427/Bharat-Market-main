@@ -16,10 +16,10 @@ export function ActionButton({
   tone?: "mint" | "coral" | "gold" | "slate";
 }) {
   const toneMap = {
-    mint: "border-mint/25 bg-[linear-gradient(135deg,rgba(52,211,153,0.16),rgba(52,211,153,0.05))] text-mint hover:border-mint/40",
-    coral: "border-coral/25 bg-[linear-gradient(135deg,rgba(248,113,113,0.16),rgba(248,113,113,0.05))] text-coral hover:border-coral/40",
-    gold: "border-violet-500/35 bg-[linear-gradient(135deg,rgba(124,58,237,0.95),rgba(168,85,247,0.9))] text-white hover:border-violet-300/40",
-    slate: "border-white/10 bg-white/5 text-slate-200 hover:border-white/20"
+    mint: "border-[color:rgba(34,217,138,0.35)] bg-[color:var(--green)] text-black hover:brightness-110",
+    coral: "border-[color:rgba(245,65,90,0.35)] bg-[color:var(--red)] text-white hover:brightness-110",
+    gold: "border-[color:var(--accent-border)] bg-[color:var(--accent)] text-white hover:bg-[color:var(--accent-hover)]",
+    slate: "border-[color:var(--border-default)] bg-[color:var(--surface-2)] text-[color:var(--text-primary)] hover:border-[color:var(--border-strong)]"
   };
 
   return (
@@ -28,7 +28,7 @@ export function ActionButton({
       whileHover={{ y: -1 }}
       transition={{ duration: 0.15 }}
       className={cn(
-        "rounded-[12px] border px-4 py-3 font-semibold transition disabled:cursor-not-allowed disabled:opacity-40",
+        "rounded-[var(--r-md)] border px-4 py-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)] focus:ring-offset-2 focus:ring-offset-[color:var(--surface-0)] disabled:cursor-not-allowed disabled:opacity-40",
         toneMap[tone],
         className
       )}

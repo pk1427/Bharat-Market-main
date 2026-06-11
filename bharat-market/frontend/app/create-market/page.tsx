@@ -4,8 +4,8 @@ import { SectionHeader } from "@/components/ui/section-header";
 
 export default function CreateMarketPage() {
   return (
-    <main className="space-y-5 pb-12">
-      <Panel className="p-6">
+    <main className="space-y-3 pb-10">
+      <Panel className="p-4 sm:p-5">
         <SectionHeader
           eyebrow="Creator Console"
           title="Create Market"

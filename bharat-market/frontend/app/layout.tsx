@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Space_Grotesk } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import "@rainbow-me/rainbowkit/styles.css";
 import "./globals.css";
 
@@ -11,15 +11,15 @@ export const metadata: Metadata = {
   description: "Sports-first decentralized prediction markets on Polygon Amoy."
 };
 
-const inter = Inter({
+const geist = Geist({
   subsets: ["latin"],
   variable: "--font-body",
   display: "swap"
 });
 
-const spaceGrotesk = Space_Grotesk({
+const geistMono = Geist_Mono({
   subsets: ["latin"],
-  variable: "--font-heading",
+  variable: "--font-mono",
   display: "swap"
 });
 
@@ -30,9 +30,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" data-scroll-behavior="smooth">
-      <body className={`${inter.variable} ${spaceGrotesk.variable} text-slate-100`}>
+      <body className={`${geist.variable} ${geistMono.variable} text-[color:var(--text-primary)]`}>
         <Providers>
-          <div className="mx-auto min-h-screen max-w-[1440px] px-3 py-4 sm:px-5 lg:px-8">
+          <div className="mx-auto min-h-screen max-w-[1440px] px-3 pb-4 sm:px-5 lg:px-8">
             <WalletBar />
             {children}
           </div>

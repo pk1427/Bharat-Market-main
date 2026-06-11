@@ -409,18 +409,18 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
   }, [createForm.durationMinutes]);
 
   return (
-    <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-      <Panel className="p-6">
+    <section className="grid gap-4 xl:grid-cols-[minmax(0,1.18fr)_minmax(340px,0.82fr)] xl:items-start">
+      <Panel className="p-4 sm:p-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="flex items-center gap-2 text-[10px] uppercase tracking-[0.18em] text-violet-400/85">
+            <p className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.08em] text-[color:var(--accent)]">
               <span className="h-1.5 w-1.5 rounded-full bg-violet-500 shadow-[0_0_8px_rgba(124,58,237,0.95)]" />
               Creator Form
             </p>
-            <h2 className="mt-4 font-heading text-[2.4rem] leading-none text-white">
+            <h2 className="mt-3 text-2xl font-semibold leading-tight text-[color:var(--text-primary)]">
               Build an oracle-settled market
             </h2>
-            <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-400">
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-[color:var(--text-secondary)]">
               Launch crypto markets with structured metadata, CoinGecko verification, and Chainlink Functions settlement.
               Cricket and election routes stay visible as future provider slots, but crypto is the live autonomous path.
             </p>
@@ -437,7 +437,7 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
           ) : null}
         </div>
 
-        <div className="mt-6 grid gap-6">
+        <div className="mt-5 grid gap-4">
           <div className="grid gap-2">
             <label className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
               Market Question
@@ -446,7 +446,7 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
               value={createForm.question}
               onChange={(event) => setCreateForm((current) => ({ ...current, question: event.target.value }))}
               placeholder={generatedQuestion || "Will Mumbai Indians beat KKR today?"}
-              className="w-full rounded-[16px] border border-white/10 bg-slate-950/60 px-4 py-4 text-base text-white outline-none transition placeholder:text-slate-600 focus:border-violet-400/35"
+              className="w-full rounded-[var(--r-md)] border border-[color:var(--border-default)] bg-[color:var(--surface-0)] px-4 py-3 text-sm text-[color:var(--text-primary)] outline-none transition placeholder:text-[color:var(--text-tertiary)] focus:border-[color:var(--accent-border)]"
             />
             <p className="text-xs text-slate-500">
               Phrase the contract so the answer resolves clearly to YES or NO.
@@ -687,22 +687,22 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
         </div>
       </Panel>
 
-      <div className="space-y-6">
-        <Panel className="p-5">
-          <p className="flex items-center gap-2 text-[10px] uppercase tracking-[0.18em] text-violet-400/85">
+      <div className="space-y-3">
+        <Panel className="p-3.5 sm:p-4">
+          <p className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.08em] text-[color:var(--accent)]">
             <span className="h-1.5 w-1.5 rounded-full bg-violet-500 shadow-[0_0_8px_rgba(124,58,237,0.95)]" />
             Preview
           </p>
 
-          <div className="mt-5 space-y-4">
-            <div className="rounded-[16px] border border-white/8 bg-white/[0.03] p-4">
-              <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Question</p>
-              <p className="mt-3 text-lg font-semibold text-white">
+          <div className="mt-3 space-y-2.5">
+            <div className="rounded-[var(--r-md)] border border-[color:var(--border-default)] bg-[color:var(--surface-2)] p-3">
+              <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-[color:var(--text-tertiary)]">Question</p>
+              <p className="mt-2 text-sm font-semibold text-[color:var(--text-primary)]">
                 {questionToCreate || "Your market question will appear here"}
               </p>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-2 sm:grid-cols-2">
               <PreviewMetric
                 icon={WalletCards}
                 label="Wallet Balance"
@@ -718,20 +718,20 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
               <PreviewMetric icon={TimerReset} label="Expiry Window" value={durationLabel} />
             </div>
 
-            <div className="rounded-[16px] border border-mint/15 bg-mint/[0.05] p-4 text-sm text-slate-300">
-              <p className="text-[10px] uppercase tracking-[0.16em] text-mint">Oracle Metadata</p>
-              <p className="mt-3 text-white">{oracleMetadata?.settlementRule ?? "Complete the structured metadata to generate a deterministic settlement rule."}</p>
-              <p className="mt-2 text-xs text-slate-500">
+            <div className="rounded-[var(--r-md)] border border-mint/15 bg-mint/[0.04] p-3 text-sm text-slate-300">
+              <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-mint">Oracle Metadata</p>
+              <p className="mt-2 text-sm font-semibold text-[color:var(--text-primary)]">{oracleMetadata?.settlementRule ?? "Complete the structured metadata to generate a deterministic settlement rule."}</p>
+              <p className="mt-1 text-xs text-[color:var(--text-tertiary)]">
                 Source: {oracleMetadata?.verificationSource ?? "--"}
               </p>
-              <p className="mt-2 break-all font-mono text-[11px] text-slate-500">
+              <p className="mt-2 max-h-12 overflow-hidden break-all font-mono text-[10px] leading-4 text-[color:var(--text-tertiary)]">
                 {structuredOracleCreationEnabled
                   ? encodedOracleQuery || "Encoded oracle query will appear here."
                   : `Legacy-compatible query: ${contractOracleQuery || "--"}`}
               </p>
             </div>
 
-            <div className="grid gap-3">
+            <div className="grid gap-2">
               <TrustStep
                 icon={CheckCircle2}
                 title="1. Structured rule"
@@ -762,7 +762,7 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
               />
             </div>
 
-            <div className="rounded-[16px] border border-white/8 bg-white/[0.03] p-4 text-sm text-slate-300">
+            <div className="rounded-[var(--r-md)] border border-[color:var(--border-default)] bg-[color:var(--surface-2)] p-3 text-sm text-[color:var(--text-secondary)]">
               <div className="flex items-center justify-between">
                 <span>Fee approval</span>
                 <span className="font-semibold text-white">
@@ -777,19 +777,19 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
           </div>
         </Panel>
 
-        <Panel className="p-5">
-          <p className="flex items-center gap-2 text-[10px] uppercase tracking-[0.18em] text-violet-400/85">
+        <Panel className="p-3.5 sm:p-4">
+          <p className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.08em] text-[color:var(--accent)]">
             <span className="h-1.5 w-1.5 rounded-full bg-violet-500 shadow-[0_0_8px_rgba(124,58,237,0.95)]" />
             Funding
           </p>
 
-          <p className="mt-4 text-sm leading-7 text-slate-400">
+          <p className="mt-3 text-xs leading-5 text-[color:var(--text-secondary)]">
             {collateralConfig.isMintable
               ? `Fund your connected wallet with ${collateralConfig.label} before launching the market.`
               : `Make sure the connected wallet is funded with ${collateralConfig.label} before creating the contract.`}
           </p>
 
-          <div className="mt-5 grid gap-3">
+          <div className="mt-3 grid gap-2">
             {collateralConfig.isMintable ? (
               <ActionButton
                 onClick={handleMintUsdc}
@@ -899,14 +899,14 @@ function TrustStep({
   active: boolean;
 }) {
   return (
-    <div className={`rounded-[16px] border px-4 py-3 ${
-      active ? "border-mint/15 bg-mint/[0.04]" : "border-white/8 bg-white/[0.03]"
+    <div className={`rounded-[var(--r-md)] border px-3 py-2.5 ${
+      active ? "border-mint/15 bg-mint/[0.04]" : "border-[color:var(--border-subtle)] bg-[color:var(--surface-2)]"
     }`}>
-      <div className="flex items-center gap-3">
-        <Icon className={`h-4 w-4 ${active ? "text-mint" : "text-slate-500"}`} />
-        <p className="text-[10px] uppercase tracking-[0.18em] text-slate-400">{title}</p>
+      <div className="flex items-center gap-2">
+        <Icon className={`h-3.5 w-3.5 ${active ? "text-mint" : "text-slate-500"}`} />
+        <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-[color:var(--text-secondary)]">{title}</p>
       </div>
-      <p className="mt-2 text-sm leading-6 text-slate-300">{detail}</p>
+      <p className="mt-1.5 text-xs leading-5 text-[color:var(--text-secondary)]">{detail}</p>
     </div>
   );
 }
@@ -983,12 +983,12 @@ function PreviewMetric({
   value: string;
 }) {
   return (
-    <div className="rounded-[14px] border border-white/8 bg-white/[0.03] p-4">
-      <div className="flex items-center gap-2 text-slate-500">
-        <Icon className="h-4 w-4" />
-        <p className="text-[10px] uppercase tracking-[0.16em]">{label}</p>
+    <div className="rounded-[var(--r-md)] border border-[color:var(--border-default)] bg-[color:var(--surface-2)] p-3">
+      <div className="flex items-center gap-2 text-[color:var(--text-tertiary)]">
+        <Icon className="h-3.5 w-3.5" />
+        <p className="font-mono text-[10px] uppercase tracking-[0.08em]">{label}</p>
       </div>
-      <p className="mt-3 text-sm font-semibold text-white">{value}</p>
+      <p className="mt-2 text-sm font-semibold text-[color:var(--text-primary)]">{value}</p>
     </div>
   );
 }

@@ -99,19 +99,18 @@ export function WalletBar() {
   }
 
   return (
-    <div className="sticky top-3 z-50 mb-8">
-      <div className="rounded-[18px] border border-white/8 bg-[rgba(10,10,16,0.88)] px-4 py-3 shadow-[0_12px_40px_rgba(0,0,0,0.35)] backdrop-blur-xl">
-        <div className="grid gap-4 xl:grid-cols-[240px_minmax(0,1fr)_390px] xl:items-center">
+    <div className="sticky top-0 z-50 -mx-3 mb-6 border-b border-[color:var(--border-subtle)] bg-[color:var(--surface-1)] px-3 sm:-mx-5 sm:px-5 lg:-mx-8 lg:px-8">
+      <div className="mx-auto max-w-[1440px]">
+        <div className="grid min-h-[52px] gap-3 xl:grid-cols-[240px_minmax(0,1fr)_390px] xl:items-center">
           <div className="flex items-center gap-3">
             <Link href="/" className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-[16px] bg-[linear-gradient(135deg,#7c3aed,#22d3ee)] shadow-[0_0_24px_rgba(124,58,237,0.24)]">
-                <Trophy className="h-5 w-5 text-white" />
+              <div className="flex h-8 w-8 items-center justify-center rounded-[var(--r-md)] border border-[color:var(--accent-border)] bg-[color:var(--accent-dim)]">
+                <span className="text-lg leading-none text-[color:var(--accent)]">◆</span>
               </div>
               <div>
-                <p className="font-heading text-[1.12rem] text-white">BharatMarket</p>
-                <div className="mt-1 flex items-center gap-2">
-                  <span className="h-1.5 w-1.5 rounded-full bg-mint shadow-[0_0_8px_rgba(52,211,153,0.95)]" />
-                  <span className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
+                <p className="font-heading text-base font-semibold text-[color:var(--text-primary)]">BharatMarket</p>
+                <div className="mt-0.5 flex items-center gap-2">
+                  <span className="text-[10px] uppercase tracking-[0.08em] text-[color:var(--text-tertiary)]">
                     Sports prediction exchange
                   </span>
                 </div>
@@ -119,7 +118,7 @@ export function WalletBar() {
             </Link>
           </div>
 
-          <nav className="flex flex-wrap items-center justify-center gap-1 rounded-[16px] border border-white/8 bg-white/[0.03] p-1.5">
+          <nav className="hidden items-center justify-center gap-6 xl:flex">
             {navItems.map((item) => {
               const active =
                 item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
@@ -130,18 +129,18 @@ export function WalletBar() {
                   key={item.label}
                   href={item.href}
                   className={cn(
-                    "group relative inline-flex items-center gap-2 rounded-[12px] px-3 py-2.5 text-sm font-medium transition",
-                    active ? "text-white" : "text-slate-400 hover:text-white"
+                    "group relative inline-flex h-[52px] items-center gap-2 text-sm font-medium transition",
+                    active ? "text-[color:var(--text-primary)]" : "text-[color:var(--text-tertiary)] hover:text-[color:var(--text-secondary)]"
                   )}
                 >
-                  {active ? (
-                    <motion.span
-                      layoutId="nav-active-pill"
-                      className="absolute inset-0 rounded-[12px] bg-white/9 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
-                    />
-                  ) : null}
                   <Icon className="relative z-10 h-4 w-4" />
                   <span className="relative z-10">{item.label}</span>
+                  {active ? (
+                    <motion.span
+                      layoutId="nav-active-underline"
+                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-[color:var(--accent)]"
+                    />
+                  ) : null}
                 </Link>
               );
             })}
@@ -153,38 +152,37 @@ export function WalletBar() {
                 <button
                   type="button"
                   onClick={() => setMenuOpen((value) => !value)}
-                  className="inline-flex items-center gap-3 rounded-[16px] border border-white/10 bg-white/[0.03] px-4 py-2.5 text-left transition hover:border-white/20"
+                  className="inline-flex items-center gap-3 rounded-[var(--r-md)] border border-[color:var(--border-default)] bg-[color:var(--surface-2)] px-3 py-2 text-left transition hover:border-[color:var(--border-strong)]"
                 >
-                  <Shield className="h-4 w-4 text-slate-400" />
+                  <Shield className="h-4 w-4 text-[color:var(--text-tertiary)]" />
                   <div className="hidden min-w-[88px] sm:block">
-                    <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Balance</p>
-                    <p className="font-mono text-sm font-semibold text-white">{balancePreview}</p>
+                    <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-[color:var(--text-tertiary)]">Balance</p>
+                    <p className="font-mono text-sm font-semibold text-[color:var(--text-primary)]">{balancePreview}</p>
                   </div>
-                  <span className="hidden h-5 w-px bg-white/10 sm:block" />
+                  <span className="hidden h-5 w-px bg-[color:var(--border-default)] sm:block" />
                   <div className="flex items-center gap-2">
-                    <span className="text-sm text-white">{shortenAddress(address)}</span>
+                    <span className="font-mono text-sm text-[color:var(--text-primary)]">{shortenAddress(address)}</span>
                     <span
                       className={cn(
-                        "rounded-full border px-2 py-1 text-[10px] uppercase tracking-[0.12em]",
+                        "inline-flex items-center gap-1.5 rounded-full border px-2 py-1 font-mono text-[10px] uppercase tracking-[0.08em]",
                         onExpectedNetwork
-                          ? "border-white/10 bg-white/[0.04] text-slate-400"
-                          : "border-coral/30 bg-coral/10 text-coral"
+                          ? "border-[color:var(--accent-border)] bg-[color:var(--accent-dim)] text-[color:var(--text-secondary)]"
+                          : "border-[color:rgba(245,65,90,0.35)] bg-[color:var(--red-dim)] text-[color:var(--red)]"
                       )}
                     >
+                      <span className={cn("h-1.5 w-1.5 rounded-full", onExpectedNetwork ? "bg-[color:var(--accent)]" : "bg-[color:var(--red)]")} />
                       {networkLabel}
                     </span>
                   </div>
-                  <ChevronDown
-                    className={`h-4 w-4 text-slate-500 transition ${menuOpen ? "rotate-180" : ""}`}
-                  />
+                  <ChevronDown className={`h-4 w-4 text-[color:var(--text-tertiary)] transition ${menuOpen ? "rotate-180" : ""}`} />
                 </button>
 
                 {menuOpen ? (
-                  <div className="absolute right-0 top-[calc(100%+10px)] z-50 w-[300px] rounded-[18px] border border-white/10 bg-[rgba(16,16,24,0.98)] p-4 shadow-[0_16px_48px_rgba(0,0,0,0.4)] backdrop-blur-xl">
+                  <div className="absolute right-0 top-[calc(100%+10px)] z-50 w-[300px] rounded-[var(--r-lg)] border border-[color:var(--border-default)] bg-[color:var(--surface-1)] p-3">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-semibold text-white">Connected Wallet</p>
-                        <p className="mt-1 text-xs text-slate-500">Manage your BharatMarket session</p>
+                        <p className="text-sm font-semibold text-[color:var(--text-primary)]">Connected Wallet</p>
+                        <p className="mt-1 text-xs text-[color:var(--text-tertiary)]">Manage your BharatMarket session</p>
                       </div>
                       <span
                         className={cn(
@@ -211,10 +209,10 @@ export function WalletBar() {
                       </button>
                     ) : null}
 
-                    <div className="mt-4 flex items-center justify-between rounded-[14px] border border-white/8 bg-white/[0.03] px-4 py-3">
+                    <div className="mt-4 flex items-center justify-between rounded-[var(--r-md)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] px-4 py-3">
                       <div>
-                        <p className="font-mono text-sm text-white">{shortenAddress(address)}</p>
-                        <p className="mt-1 text-xs text-slate-500">{balancePreview}</p>
+                        <p className="font-mono text-sm text-[color:var(--text-primary)]">{shortenAddress(address)}</p>
+                        <p className="mt-1 text-xs text-[color:var(--text-tertiary)]">{balancePreview}</p>
                       </div>
                       <button
                         type="button"
@@ -226,10 +224,10 @@ export function WalletBar() {
                       </button>
                     </div>
 
-                    <div className="mt-4 space-y-2 border-t border-white/8 pt-4">
+                    <div className="mt-4 space-y-1 border-t border-[color:var(--border-subtle)] pt-3">
                       <Link
                         href="/my-account"
-                        className="flex items-center gap-3 rounded-[12px] px-3 py-3 text-sm text-slate-300 transition hover:bg-white/[0.04] hover:text-white"
+                        className="flex items-center gap-3 rounded-[var(--r-md)] px-3 py-2.5 text-sm text-[color:var(--text-secondary)] transition hover:bg-[color:var(--surface-2)] hover:text-[color:var(--text-primary)]"
                         onClick={() => setMenuOpen(false)}
                       >
                         <Wallet className="h-4 w-4" />
@@ -237,26 +235,26 @@ export function WalletBar() {
                       </Link>
                       <Link
                         href="/manage-markets"
-                        className="flex items-center gap-3 rounded-[12px] px-3 py-3 text-sm text-slate-300 transition hover:bg-white/[0.04] hover:text-white"
+                        className="flex items-center gap-3 rounded-[var(--r-md)] px-3 py-2.5 text-sm text-[color:var(--text-secondary)] transition hover:bg-[color:var(--surface-2)] hover:text-[color:var(--text-primary)]"
                         onClick={() => setMenuOpen(false)}
                       >
                         <ShieldCheck className="h-4 w-4" />
                         Manage Markets
                       </Link>
-                      <div className="flex items-center gap-3 rounded-[12px] px-3 py-3 text-sm text-slate-300">
+                      <div className="flex items-center gap-3 rounded-[var(--r-md)] px-3 py-2.5 text-sm text-[color:var(--text-secondary)]">
                         <Wifi className="h-4 w-4" />
                         <span>{onExpectedNetwork ? polygonAmoy.name : "Unsupported network"}</span>
                       </div>
                     </div>
 
-                    <div className="mt-4 border-t border-white/8 pt-4">
+                    <div className="mt-3 border-t border-[color:var(--border-subtle)] pt-3">
                       <button
                         type="button"
                         onClick={() => {
                           disconnect();
                           setMenuOpen(false);
                         }}
-                        className="inline-flex w-full items-center justify-center gap-3 rounded-[14px] border border-white/10 bg-black/20 px-4 py-3 text-sm font-semibold text-white transition hover:border-white/20"
+                        className="inline-flex w-full items-center justify-center gap-3 rounded-[var(--r-md)] border border-[color:var(--border-default)] bg-[color:var(--surface-2)] px-4 py-3 text-sm font-semibold text-[color:var(--text-primary)] transition hover:border-[color:var(--border-strong)]"
                       >
                         <LogOut className="h-4 w-4" />
                         Disconnect

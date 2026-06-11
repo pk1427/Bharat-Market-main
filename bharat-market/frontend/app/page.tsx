@@ -15,10 +15,11 @@ import {
   Waves
 } from "lucide-react";
 
+import { Panel } from "@/components/ui/panel";
 import { MarketList } from "@/components/market-list";
-import { DevSyncStatus } from "@/components/dev-sync-status";
 import { GlowBadge } from "@/components/ui/glow-badge";
 import { SectionHeader } from "@/components/ui/section-header";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { TickerRow } from "@/components/ui/ticker-row";
 import { useBoardAnalytics } from "@/hooks/use-board-analytics";
 import { useIndexerStatus } from "@/hooks/use-indexer-status";
@@ -48,11 +49,14 @@ export default function HomePage() {
   );
 
   const boardMetrics = useMemo(() => {
+    const totalMarkets = markets.length;
+    const resolvedMarkets = markets.filter((market) => market.status === "resolved");
     const activeMarkets = boardMarkets.filter((market) => market.status === "active");
     const awaitingMarkets = boardMarkets.filter((market) => market.status === "awaiting");
     const totalVolume = boardMarkets.reduce((sum, market) => sum + market.volume, 0n);
     const totalLiquidity = boardMarkets.reduce((sum, market) => sum + market.liquidity, 0n);
     const liveTraders = boardMarkets.reduce((sum, market) => sum + market.traderCount, 0);
+    const activeParticipants = markets.reduce((sum, market) => sum + market.traderCount, 0);
     const categoryItems = [...boardMarkets.reduce((map, market) => {
       map.set(market.category, (map.get(market.category) ?? 0) + 1);
       return map;
@@ -79,16 +83,19 @@ export default function HomePage() {
             .slice(0, 3);
 
     return {
+      totalMarkets,
+      resolvedMarkets,
       activeMarkets,
       awaitingMarkets,
       totalVolume,
       totalLiquidity,
       liveTraders,
+      activeParticipants,
       categoryItems,
       featured,
       topMovers
     };
-  }, [boardMarkets, boardTopMovers, boardTrending]);
+  }, [boardMarkets, boardTopMovers, boardTrending, markets]);
 
   const tickerItems = useMemo(
     () =>
@@ -101,7 +108,6 @@ export default function HomePage() {
     [boardMarkets]
   );
 
-  const leadMarket = boardMetrics.featured[0];
   const headline =
     boardMetrics.activeMarkets.length > 0
       ? "Trade live sports probability with exchange-grade clarity."
@@ -112,29 +118,29 @@ export default function HomePage() {
       : "The live board is quiet right now, but liquidity, oracle state, and archived outcomes are still streaming through the terminal so traders can stay positioned.";
 
   return (
-    <main className="space-y-8 pb-16">
-      <section className="overflow-hidden rounded-[30px] bg-[radial-gradient(circle_at_top_left,rgba(124,58,237,0.18),transparent_38%),radial-gradient(circle_at_top_right,rgba(34,211,238,0.08),transparent_28%),linear-gradient(180deg,rgba(17,16,28,0.98),rgba(10,10,18,0.98))] px-6 py-6 sm:px-8 sm:py-8">
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_420px]">
-          <div className="space-y-6">
-            <div className="flex flex-wrap items-center gap-3">
+    <main className="space-y-5 pb-12">
+      <section className="overflow-hidden rounded-[var(--r-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-0)] px-4 py-4 sm:px-5 sm:py-5">
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_370px]">
+          <div className="space-y-5">
+            <div className="flex flex-wrap items-center gap-2">
               <GlowBadge label="Protocol Explorer" tone="gold" />
               <GlowBadge
-                label={boardMetrics.activeMarkets.length > 0 ? "Live markets on board" : "Board in watch mode"}
+                label={boardMetrics.activeMarkets.length > 0 ? "Live Markets" : "Watch Mode"}
                 tone={boardMetrics.activeMarkets.length > 0 ? "mint" : "slate"}
                 pulse={boardMetrics.activeMarkets.length > 0}
               />
               <GlowBadge
-                label={boardStream.status === "live" ? "Live stream connected" : boardStream.status === "fallback" ? "Fallback sync" : "Stream reconnecting"}
+                label={boardStream.status === "live" ? "Stream Connected" : boardStream.status === "fallback" ? "Fallback Sync" : "Reconnecting"}
                 tone={boardStream.status === "live" ? "mint" : boardStream.status === "fallback" ? "gold" : "slate"}
                 pulse={boardStream.status === "live"}
               />
               <GlowBadge
                 label={
                   indexerStatus.data?.freshness.fresh
-                    ? "Indexer fresh"
+                    ? "Indexer Fresh"
                     : indexerStatus.data?.freshness.state === "stale"
-                      ? "Indexer stale"
-                      : "Indexer warming"
+                      ? "Indexer Stale"
+                      : "Indexer Warming"
                 }
                 tone={
                   indexerStatus.data?.freshness.fresh
@@ -146,145 +152,98 @@ export default function HomePage() {
               />
             </div>
 
-            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_260px] xl:items-end">
-              <div className="space-y-5">
-                <h1 className="font-heading max-w-5xl text-[3.35rem] leading-[0.9] tracking-[-0.06em] text-white sm:text-[5.35rem]">
-                  {headline}
+            <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_230px] xl:items-end">
+              <div className="space-y-4">
+                <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-[color:var(--text-tertiary)]">Predict. Trade. Verify.</p>
+                <h1 className="max-w-3xl text-[2.75rem] font-semibold leading-[1.02] text-[color:var(--text-primary)] sm:text-[4rem]">
+                  Oracle-powered prediction markets for crypto and sports.
                 </h1>
-                <p className="max-w-3xl text-[15px] leading-7 text-slate-400">
-                  {subhead}
+                <p className="max-w-2xl text-sm leading-6 text-[color:var(--text-secondary)]">
+                  Trade event probabilities with transparent oracle settlement, automated resolution, and indexed market infrastructure.
                 </p>
                 <div className="flex flex-wrap gap-3">
                   <Link
                     href="#market-board"
                     className="inline-flex items-center gap-2 rounded-[14px] bg-white px-4 py-3 text-sm font-semibold text-black transition hover:opacity-90"
                   >
-                    Explore Board
+                    Explore Markets
                     <ArrowUpRight className="h-4 w-4" />
                   </Link>
                   <Link
-                    href={boardMetrics.activeMarkets.length > 0 ? "/my-account" : "/history"}
-                    className="inline-flex items-center gap-2 rounded-[14px] border border-white/10 bg-white/[0.05] px-4 py-3 text-sm font-medium text-slate-200 transition hover:border-white/20 hover:text-white"
+                    href="/create-market"
+                    className="inline-flex items-center gap-2 rounded-[14px] border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-medium text-slate-200 transition hover:border-white/20 hover:text-white"
                   >
-                    {boardMetrics.activeMarkets.length > 0 ? "Open Account" : "View Archive"}
+                    Create Market
+                    <ArrowUpRight className="h-4 w-4" />
                   </Link>
                 </div>
               </div>
 
-              <div className="data-grid-fade rounded-[26px] bg-[linear-gradient(180deg,rgba(8,12,20,0.94),rgba(15,18,28,0.96))] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-                <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">Live Board Metrics</p>
-                <div className="mt-4 space-y-4">
-                  <MetricTape label="Live Markets" value={String(boardMetrics.activeMarkets.length)} accent="text-mint" />
-                  <MetricTape label="Liquidity" value={formatUsdcCompact(boardMetrics.totalLiquidity)} accent="text-gold" />
-                  <MetricTape label="Volume" value={formatUsdcCompact(boardMetrics.totalVolume)} accent="text-cyan-300" />
-                  <MetricTape label="Participants" value={String(boardMetrics.liveTraders)} accent="text-white" />
+              <div className="rounded-[var(--r-lg)] border border-[color:var(--border-default)] bg-[color:var(--surface-1)] p-4">
+                <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-[color:var(--text-tertiary)]">Protocol Metrics</p>
+                <div className="mt-3 grid gap-2">
+                  <ProtocolStat label="Total Markets" value={String(boardMetrics.totalMarkets)} />
+                  <ProtocolStat label="Resolved Markets" value={String(boardMetrics.resolvedMarkets.length)} />
+                  <ProtocolStat label="Total Volume" value={formatUsdcCompact(markets.reduce((sum, market) => sum + market.volume, 0n))} />
+                  <ProtocolStat label="Total Liquidity" value={formatUsdcCompact(markets.reduce((sum, market) => sum + market.liquidity, 0n))} />
+                  <ProtocolStat label="Active Participants" value={String(boardMetrics.activeParticipants)} />
                 </div>
               </div>
             </div>
 
-            {tickerItems.length > 1 ? <TickerRow items={tickerItems} className="border-white/8 bg-white/[0.03]" /> : null}
+            {tickerItems.length > 1 ? <TickerRow items={tickerItems} className="border-[color:var(--border-subtle)] bg-[color:var(--surface-1)]" /> : null}
           </div>
 
-          <div className="space-y-4">
-            <div className="rounded-[28px] bg-[linear-gradient(180deg,rgba(10,14,24,0.98),rgba(16,18,28,0.96))] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+          <div className="space-y-3">
+            <Panel className="p-4">
               <div className="flex items-center justify-between gap-4">
                 <div>
-                  <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">Trending Rail</p>
-                  <h2 className="market-pulse mt-2 font-heading text-[2rem] uppercase text-white">Board Focus</h2>
+                  <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-[color:var(--text-tertiary)]">How BharatMarket Works</p>
+                  <h2 className="mt-2 text-xl font-semibold text-[color:var(--text-primary)]">Flow</h2>
                 </div>
-                <div className="inline-flex items-center gap-2 rounded-full border border-mint/20 bg-mint/10 px-3 py-2 text-sm font-semibold text-mint">
+                <div className="inline-flex items-center gap-2 rounded-full border border-mint/20 bg-mint/10 px-3 py-2 text-xs font-semibold text-mint">
                   <Flame className="h-4 w-4" />
-                  {boardMetrics.featured.length} Focused
+                  {boardMetrics.featured.length} ranked
                 </div>
               </div>
 
-              {leadMarket ? (
-                <Link
-                  href={`/markets/${leadMarket.address}`}
-                  className="group mt-5 block rounded-[22px] bg-white/[0.035] p-5 transition hover:bg-white/[0.06]"
-                >
-                  <div className="flex items-start justify-between gap-5">
-                    <div className="min-w-0">
-                      <p className="text-[10px] uppercase tracking-[0.26em] text-slate-500">Featured contract</p>
-                      <p className="mt-3 text-[2rem] font-semibold leading-[1.04] tracking-[-0.04em] text-white">
-                        {leadMarket.question}
-                      </p>
-                      <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-slate-500">
-                        <span>{leadMarket.category}</span>
-                        <span>{leadMarket.statusLabel}</span>
-                        <span>{leadMarket.traderCount} traders</span>
-                        <span>{formatUsdcCompact(leadMarket.volume)} volume</span>
+              <div className="mt-4 grid gap-2">
+                {protocolFlow.map((step, index) => (
+                  <div key={step.title} className="rounded-[var(--r-md)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] p-3">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-[color:var(--text-tertiary)]">0{index + 1}</p>
+                        <p className="mt-1 text-sm font-semibold text-[color:var(--text-primary)]">{step.title}</p>
                       </div>
+                      <span className="text-xs text-slate-500">{step.helper}</span>
                     </div>
-                    <div className="text-right">
-                      <p className="font-mono text-[3rem] font-semibold leading-none text-mint">
-                        {formatPercent(leadMarket.yesProbability)}
-                      </p>
-                      <p className="mt-2 text-[10px] uppercase tracking-[0.24em] text-slate-500">YES</p>
-                    </div>
+                    <p className="mt-2 text-xs leading-5 text-[color:var(--text-secondary)]">{step.description}</p>
                   </div>
-                </Link>
-              ) : (
-                <div className="mt-5 rounded-[22px] bg-white/[0.035] p-5 text-sm text-slate-400">
-                  Featured contracts will appear here when the board has enough activity to rank markets.
-                </div>
-              )}
-
-              <div className="mt-4 grid gap-3">
-                {boardMetrics.featured.slice(1, 4).map((market, index) => (
-                  <Link
-                    key={market.address}
-                    href={`/markets/${market.address}`}
-                    className="grid grid-cols-[1fr_auto] items-center gap-4 rounded-[18px] bg-black/18 px-4 py-4 transition hover:bg-white/[0.05]"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">#{index + 2} highlighted</p>
-                      <p className="mt-2 truncate text-base font-semibold text-white">{market.question}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-mono text-xl text-mint">{formatPercent(market.yesProbability)}</p>
-                      <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">YES</p>
-                    </div>
-                  </Link>
                 ))}
               </div>
-            </div>
+            </Panel>
 
-            <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-1">
-              <RailPanel
-                eyebrow="Resolution Queue"
-                icon={Radar}
-                body={
-                  boardMetrics.awaitingMarkets.length > 0
-                    ? `${boardMetrics.awaitingMarkets.length} market${boardMetrics.awaitingMarkets.length === 1 ? "" : "s"} waiting for oracle resolution.`
-                    : "No contracts are currently queued for resolution."
-                }
-              />
-              <RailPanel
-                eyebrow="Live Tape"
-                icon={Activity}
-                body={
-                  warning
-                    ? "Backend snapshots are keeping the board responsive while Amoy RPC is noisy."
-                    : "Board data is flowing through the backend-assisted market index."
-                }
-              />
-              <RailPanel
-                eyebrow="Top Movers"
-                icon={Trophy}
-                body={
-                  boardMetrics.topMovers[0]
-                    ? `${boardMetrics.topMovers[0].question.slice(0, 42)}${boardMetrics.topMovers[0].question.length > 42 ? "..." : ""} moved furthest away from neutral pricing.`
-                    : "Probability movers appear here as the board becomes active."
-                }
-              />
-            </div>
           </div>
         </div>
       </section>
 
-      <section id="market-board" className="grid gap-6 2xl:grid-cols-[minmax(0,1.55fr)_360px] 2xl:items-start">
-        <div className="space-y-5">
+      <section className="grid gap-4 lg:grid-cols-3">
+        {supportedMarkets.map((marketType) => (
+          <Panel key={marketType.title} className="p-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-[color:var(--text-tertiary)]">{marketType.badge}</p>
+                <h3 className="mt-2 text-xl font-semibold text-[color:var(--text-primary)]">{marketType.title}</h3>
+              </div>
+              <StatusBadge label={marketType.status} tone={marketType.tone} />
+            </div>
+            <p className="mt-3 text-sm leading-6 text-[color:var(--text-secondary)]">{marketType.description}</p>
+          </Panel>
+        ))}
+      </section>
+
+      <section id="market-board" className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_330px] 2xl:items-start">
+        <div className="space-y-4">
           <SectionHeader
             eyebrow="Protocol Board"
             title="Market Board"
@@ -355,28 +314,6 @@ export default function HomePage() {
               helper: `${market.category} • ${market.statusLabel}`
             }))}
           />
-          <SidebarBlock
-            eyebrow="Market Sentiment"
-            title="Board pulse"
-            items={[
-              {
-                label: "YES leadership",
-                value: leadMarket ? formatPercent(leadMarket.yesProbability) : "--",
-                helper: leadMarket ? leadMarket.question.slice(0, 32) : "No featured leader yet"
-              },
-              {
-                label: "Participants",
-                value: String(boardMetrics.liveTraders),
-                helper: "unique observed traders"
-              },
-              {
-                label: "Liquidity",
-                value: formatUsdcCompact(boardMetrics.totalLiquidity),
-                helper: "pooled collateral depth"
-              }
-            ]}
-          />
-          <DevSyncStatus />
         </div>
       </section>
     </main>
@@ -396,6 +333,21 @@ function MetricTape({
     <div className="flex items-center justify-between gap-4 border-b border-white/6 pb-3 last:border-b-0 last:pb-0">
       <p className="text-[10px] uppercase tracking-[0.24em] text-slate-500">{label}</p>
       <p className={`font-mono text-xl font-semibold ${accent}`}>{value}</p>
+    </div>
+  );
+}
+
+function ProtocolStat({
+  label,
+  value
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-[var(--r-md)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] px-3 py-2.5">
+      <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-[color:var(--text-tertiary)]">{label}</p>
+      <p className="font-mono text-base font-semibold text-[color:var(--text-primary)]">{value}</p>
     </div>
   );
 }
@@ -430,20 +382,70 @@ function SidebarBlock({
   items: Array<{ label: string; value: string; helper: string }>;
 }) {
   return (
-    <div className="rounded-[24px] bg-[linear-gradient(180deg,rgba(16,18,29,0.96),rgba(11,13,22,0.94))] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
-      <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">{eyebrow}</p>
-      <h3 className="mt-2 font-heading text-[1.7rem] uppercase text-white">{title}</h3>
-      <div className="mt-5 space-y-4">
+    <div className="rounded-[var(--r-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-1)] p-4">
+      <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-[color:var(--text-tertiary)]">{eyebrow}</p>
+      <h3 className="mt-2 text-xl font-semibold text-[color:var(--text-primary)]">{title}</h3>
+      <div className="mt-4 space-y-2">
         {items.map((item) => (
-          <div key={`${item.label}-${item.value}`} className="rounded-[18px] bg-white/[0.035] px-4 py-4">
+          <div key={`${item.label}-${item.value}`} className="rounded-[var(--r-md)] bg-[color:var(--surface-2)] px-3 py-3">
             <div className="flex items-center justify-between gap-4">
-              <p className="text-sm text-slate-300">{item.label}</p>
-              <p className="font-mono text-lg font-semibold text-white">{item.value}</p>
+              <p className="text-sm text-[color:var(--text-secondary)]">{item.label}</p>
+              <p className="font-mono text-base font-semibold text-[color:var(--text-primary)]">{item.value}</p>
             </div>
-            <p className="mt-2 text-xs text-slate-500">{item.helper}</p>
+            <p className="mt-1 text-xs text-[color:var(--text-tertiary)]">{item.helper}</p>
           </div>
         ))}
       </div>
     </div>
   );
 }
+
+const protocolFlow = [
+  {
+    title: "Create Market",
+    helper: "01",
+    description: "Structured creator forms launch crypto and cricket markets with clear oracle routes and expiry windows."
+  },
+  {
+    title: "Trade Outcomes",
+    helper: "02",
+    description: "Traders deploy capital into YES or NO positions with live probability, liquidity, and wallet-native settlement."
+  },
+  {
+    title: "Oracle Verification",
+    helper: "03",
+    description: "Chainlink Functions fetches CoinGecko or CricAPI data and normalizes a deterministic result."
+  },
+  {
+    title: "Settlement & Redemption",
+    helper: "04",
+    description: "Markets resolve on-chain, the indexer syncs state, and winning holders redeem automatically."
+  }
+];
+
+const supportedMarkets = [
+  {
+    title: "Crypto Markets",
+    badge: "Live",
+    status: "Production ready",
+    tone: "mint" as const,
+    description:
+      "CoinGecko-backed market creation, settlement, and redemption with price_above and price_below support."
+  },
+  {
+    title: "Cricket Markets",
+    badge: "Live",
+    status: "Production ready",
+    tone: "mint" as const,
+    description:
+      "CricAPI-backed winner markets for finished fixtures, resolved through the same indexed and on-chain pipeline."
+  },
+  {
+    title: "Election Markets",
+    badge: "Future",
+    status: "Coming Soon",
+    tone: "gold" as const,
+    description:
+      "Intentionally future-facing and marked as not production-enabled until a verified election oracle is added."
+  }
+];
