@@ -214,7 +214,7 @@ export function MarketDetail({ address }: { address: string }) {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <Link href="/" className="inline-flex text-sm text-slate-400 transition hover:text-white">
+        <Link href="/markets" className="inline-flex text-sm text-slate-400 transition hover:text-white">
           ← Back to markets
         </Link>
         <button

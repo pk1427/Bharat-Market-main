@@ -32,7 +32,7 @@ export default function RootLayout({
     <html lang="en" data-scroll-behavior="smooth">
       <body className={`${geist.variable} ${geistMono.variable} text-[color:var(--text-primary)]`}>
         <Providers>
-          <div className="mx-auto min-h-screen max-w-[1440px] px-3 pb-4 sm:px-5 lg:px-8">
+          <div className="app-shell mx-auto min-h-screen max-w-[1500px] px-3 pb-4 sm:px-5 lg:px-7 2xl:px-8">
             <WalletBar />
             {children}
           </div>

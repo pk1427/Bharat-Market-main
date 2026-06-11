@@ -1,398 +1,229 @@
-"use client";
-
 import Link from "next/link";
-import { useMemo, useState } from "react";
 import {
-  Activity,
-  ArrowUpRight,
-  Flame,
-  FolderClock,
-  LineChart,
-  Radar,
+  ArrowRight,
+  CheckCircle2,
+  Code2,
+  Eye,
+  FileText,
+  GitBranch,
+  Globe2,
+  Radio,
+  ShieldCheck,
   Sparkles,
-  Trophy,
-  Users,
-  Waves
+  TerminalSquare,
+  TrendingUp
 } from "lucide-react";
 
 import { Panel } from "@/components/ui/panel";
-import { MarketList } from "@/components/market-list";
-import { GlowBadge } from "@/components/ui/glow-badge";
-import { SectionHeader } from "@/components/ui/section-header";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { TickerRow } from "@/components/ui/ticker-row";
-import { useBoardAnalytics } from "@/hooks/use-board-analytics";
-import { useIndexerStatus } from "@/hooks/use-indexer-status";
-import { useLiveBoardStream } from "@/hooks/use-live-stream";
-import { useMarketBoard } from "@/hooks/use-market-board";
-import { formatPercent, formatProbabilityNumber, formatUsdcCompact } from "@/lib/format";
 
-export default function HomePage() {
-  const [marketRefreshTick] = useState(0);
-  const boardStream = useLiveBoardStream();
-  const indexerStatus = useIndexerStatus();
-  const { markets, loading, error, warning, refresh } = useMarketBoard({
-    externalRefreshTick: marketRefreshTick
-  });
-  const analytics = useBoardAnalytics();
-  const boardMarkets = useMemo(
-    () => markets.filter((market) => market.status !== "resolved"),
-    [markets]
-  );
-  const boardTopMovers = useMemo(
-    () => analytics.topMovers.filter((market) => market.status !== "resolved"),
-    [analytics.topMovers]
-  );
-  const boardTrending = useMemo(
-    () => analytics.trending.filter((market) => market.status !== "resolved"),
-    [analytics.trending]
-  );
-
-  const boardMetrics = useMemo(() => {
-    const totalMarkets = markets.length;
-    const resolvedMarkets = markets.filter((market) => market.status === "resolved");
-    const activeMarkets = boardMarkets.filter((market) => market.status === "active");
-    const awaitingMarkets = boardMarkets.filter((market) => market.status === "awaiting");
-    const totalVolume = boardMarkets.reduce((sum, market) => sum + market.volume, 0n);
-    const totalLiquidity = boardMarkets.reduce((sum, market) => sum + market.liquidity, 0n);
-    const liveTraders = boardMarkets.reduce((sum, market) => sum + market.traderCount, 0);
-    const activeParticipants = markets.reduce((sum, market) => sum + market.traderCount, 0);
-    const categoryItems = [...boardMarkets.reduce((map, market) => {
-      map.set(market.category, (map.get(market.category) ?? 0) + 1);
-      return map;
-    }, new Map<string, number>())]
-      .sort((left, right) => right[1] - left[1])
-      .slice(0, 3);
-    const featured = (boardTrending.length > 0 ? boardTrending : [...boardMarkets])
-      .slice()
-      .sort((left, right) => {
-        const scoreLeft = Number(left.volume + left.liquidity / 4n) + left.traderCount * 1_000_000;
-        const scoreRight = Number(right.volume + right.liquidity / 4n) + right.traderCount * 1_000_000;
-        return scoreRight - scoreLeft;
-      })
-      .slice(0, 4);
-    const topMovers =
-      boardTopMovers.length > 0
-        ? boardTopMovers.slice(0, 3)
-        : [...boardMarkets]
-            .sort(
-              (left, right) =>
-                Math.abs(formatProbabilityNumber(right.yesProbability) - 50) -
-                Math.abs(formatProbabilityNumber(left.yesProbability) - 50)
-            )
-            .slice(0, 3);
-
-    return {
-      totalMarkets,
-      resolvedMarkets,
-      activeMarkets,
-      awaitingMarkets,
-      totalVolume,
-      totalLiquidity,
-      liveTraders,
-      activeParticipants,
-      categoryItems,
-      featured,
-      topMovers
-    };
-  }, [boardMarkets, boardTopMovers, boardTrending, markets]);
-
-  const tickerItems = useMemo(
-    () =>
-      [...new Map(
-        boardMarkets.map((market) => [
-          market.address,
-          `${market.category} • ${market.question.slice(0, 32)}${market.question.length > 32 ? "..." : ""} • YES ${formatPercent(market.yesProbability)}`
-        ])
-      ).values()].slice(0, 8),
-    [boardMarkets]
-  );
-
-  const headline =
-    boardMetrics.activeMarkets.length > 0
-      ? "Trade live sports probability with exchange-grade clarity."
-      : "Monitor live sports markets with exchange-grade clarity.";
-  const subhead =
-    boardMetrics.activeMarkets.length > 0
-      ? "BharatMarket turns real-time sports conviction into a fast probability board with live pricing, wallet-native execution, and clean on-chain settlement."
-      : "The live board is quiet right now, but liquidity, oracle state, and archived outcomes are still streaming through the terminal so traders can stay positioned.";
-
+export default function LandingPage() {
   return (
-    <main className="space-y-5 pb-12">
-      <section className="overflow-hidden rounded-[var(--r-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-0)] px-4 py-4 sm:px-5 sm:py-5">
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_370px]">
-          <div className="space-y-5">
+    <main className="page-stack">
+      <section className="relative overflow-hidden rounded-[32px] border border-[color:var(--border-default)] bg-[radial-gradient(circle_at_18%_12%,rgba(34,217,138,0.14),transparent_24rem),radial-gradient(circle_at_70%_0%,rgba(124,92,252,0.18),transparent_26rem),linear-gradient(180deg,rgba(14,14,23,0.94),rgba(7,7,13,0.98))] px-5 py-8 sm:px-8 sm:py-12 lg:px-10">
+        <div className="grid gap-8 xl:grid-cols-[minmax(0,1.05fr)_430px] xl:items-center">
+          <div className="max-w-4xl">
             <div className="flex flex-wrap items-center gap-2">
-              <GlowBadge label="Protocol Explorer" tone="gold" />
-              <GlowBadge
-                label={boardMetrics.activeMarkets.length > 0 ? "Live Markets" : "Watch Mode"}
-                tone={boardMetrics.activeMarkets.length > 0 ? "mint" : "slate"}
-                pulse={boardMetrics.activeMarkets.length > 0}
-              />
-              <GlowBadge
-                label={boardStream.status === "live" ? "Stream Connected" : boardStream.status === "fallback" ? "Fallback Sync" : "Reconnecting"}
-                tone={boardStream.status === "live" ? "mint" : boardStream.status === "fallback" ? "gold" : "slate"}
-                pulse={boardStream.status === "live"}
-              />
-              <GlowBadge
-                label={
-                  indexerStatus.data?.freshness.fresh
-                    ? "Indexer Fresh"
-                    : indexerStatus.data?.freshness.state === "stale"
-                      ? "Indexer Stale"
-                      : "Indexer Warming"
-                }
-                tone={
-                  indexerStatus.data?.freshness.fresh
-                    ? "mint"
-                    : indexerStatus.data?.freshness.state === "stale"
-                      ? "gold"
-                      : "slate"
-                }
-              />
+              <StatusBadge label="Live on Polygon Amoy" tone="mint" />
+              <StatusBadge label="Oracle-settled" tone="gold" />
+              <StatusBadge label="Indexed backend" tone="slate" />
             </div>
-
-            <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_230px] xl:items-end">
-              <div className="space-y-4">
-                <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-[color:var(--text-tertiary)]">Predict. Trade. Verify.</p>
-                <h1 className="max-w-3xl text-[2.75rem] font-semibold leading-[1.02] text-[color:var(--text-primary)] sm:text-[4rem]">
-                  Oracle-powered prediction markets for crypto and sports.
-                </h1>
-                <p className="max-w-2xl text-sm leading-6 text-[color:var(--text-secondary)]">
-                  Trade event probabilities with transparent oracle settlement, automated resolution, and indexed market infrastructure.
-                </p>
-                <div className="flex flex-wrap gap-3">
-                  <Link
-                    href="#market-board"
-                    className="inline-flex items-center gap-2 rounded-[14px] bg-white px-4 py-3 text-sm font-semibold text-black transition hover:opacity-90"
-                  >
-                    Explore Markets
-                    <ArrowUpRight className="h-4 w-4" />
-                  </Link>
-                  <Link
-                    href="/create-market"
-                    className="inline-flex items-center gap-2 rounded-[14px] border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-medium text-slate-200 transition hover:border-white/20 hover:text-white"
-                  >
-                    Create Market
-                    <ArrowUpRight className="h-4 w-4" />
-                  </Link>
-                </div>
-              </div>
-
-              <div className="rounded-[var(--r-lg)] border border-[color:var(--border-default)] bg-[color:var(--surface-1)] p-4">
-                <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-[color:var(--text-tertiary)]">Protocol Metrics</p>
-                <div className="mt-3 grid gap-2">
-                  <ProtocolStat label="Total Markets" value={String(boardMetrics.totalMarkets)} />
-                  <ProtocolStat label="Resolved Markets" value={String(boardMetrics.resolvedMarkets.length)} />
-                  <ProtocolStat label="Total Volume" value={formatUsdcCompact(markets.reduce((sum, market) => sum + market.volume, 0n))} />
-                  <ProtocolStat label="Total Liquidity" value={formatUsdcCompact(markets.reduce((sum, market) => sum + market.liquidity, 0n))} />
-                  <ProtocolStat label="Active Participants" value={String(boardMetrics.activeParticipants)} />
-                </div>
-              </div>
+            <p className="mt-7 font-mono text-[11px] uppercase tracking-[0.18em] text-[color:var(--text-tertiary)]">
+              Predict. Trade. Verify.
+            </p>
+            <h1 className="mt-3 max-w-5xl text-[3.2rem] font-semibold leading-[0.98] tracking-[-0.06em] text-[color:var(--text-primary)] sm:text-[5.5rem] xl:text-[6.4rem]">
+              Oracle-powered prediction markets.
+            </h1>
+            <p className="mt-5 max-w-2xl text-base leading-7 text-[color:var(--text-secondary)]">
+              Create, trade, resolve, and embed crypto and cricket prediction markets with transparent provider data, Chainlink Functions settlement, and a backend indexer built for smooth exchange-grade UX.
+            </p>
+            <div className="mt-7 flex flex-wrap gap-3">
+              <Link
+                href="/markets"
+                className="inline-flex items-center gap-2 rounded-[var(--r-md)] bg-white px-5 py-3 text-sm font-semibold text-black transition hover:opacity-90"
+              >
+                Enter Protocol
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+              <Link
+                href="/docs"
+                className="inline-flex items-center gap-2 rounded-[var(--r-md)] border border-[color:var(--border-default)] bg-[color:var(--surface-2)] px-5 py-3 text-sm font-semibold text-[color:var(--text-primary)] transition hover:border-[color:var(--border-strong)]"
+              >
+                Read Documentation
+                <FileText className="h-4 w-4" />
+              </Link>
+              <Link
+                href="/create-market"
+                className="inline-flex items-center gap-2 rounded-[var(--r-md)] border border-[color:var(--border-default)] bg-transparent px-5 py-3 text-sm font-semibold text-[color:var(--text-secondary)] transition hover:border-[color:var(--border-strong)] hover:text-[color:var(--text-primary)]"
+              >
+                Create Market
+                <ArrowRight className="h-4 w-4" />
+              </Link>
             </div>
-
-            {tickerItems.length > 1 ? <TickerRow items={tickerItems} className="border-[color:var(--border-subtle)] bg-[color:var(--surface-1)]" /> : null}
           </div>
 
-          <div className="space-y-3">
-            <Panel className="p-4">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-[color:var(--text-tertiary)]">How BharatMarket Works</p>
-                  <h2 className="mt-2 text-xl font-semibold text-[color:var(--text-primary)]">Flow</h2>
-                </div>
-                <div className="inline-flex items-center gap-2 rounded-full border border-mint/20 bg-mint/10 px-3 py-2 text-xs font-semibold text-mint">
-                  <Flame className="h-4 w-4" />
-                  {boardMetrics.featured.length} ranked
-                </div>
-              </div>
-
-              <div className="mt-4 grid gap-2">
-                {protocolFlow.map((step, index) => (
-                  <div key={step.title} className="rounded-[var(--r-md)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] p-3">
-                    <div className="flex items-center justify-between gap-4">
-                      <div>
-                        <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-[color:var(--text-tertiary)]">0{index + 1}</p>
-                        <p className="mt-1 text-sm font-semibold text-[color:var(--text-primary)]">{step.title}</p>
-                      </div>
-                      <span className="text-xs text-slate-500">{step.helper}</span>
-                    </div>
-                    <p className="mt-2 text-xs leading-5 text-[color:var(--text-secondary)]">{step.description}</p>
-                  </div>
-                ))}
-              </div>
-            </Panel>
-
-          </div>
+          <Panel className="p-5">
+            <p className="micro-label">Private reserves</p>
+            <h2 className="mt-2 text-2xl font-semibold text-[color:var(--text-primary)]">Oracle Integrity: Active</h2>
+            <div className="mt-5 grid gap-3">
+              <HeroSignal icon={ShieldCheck} title="Deterministic Settlement" body="CoinGecko and CricAPI provider responses flow through Chainlink Functions before on-chain outcome updates." />
+              <HeroSignal icon={TerminalSquare} title="Indexed Execution" body="Market board, portfolio, widgets, and public APIs read from BharatMarket’s backend data layer." />
+              <HeroSignal icon={Eye} title="Transparent Outcomes" body="Each market exposes provider, external id, settlement rule, fetched result, and resolution state." />
+            </div>
+          </Panel>
         </div>
       </section>
 
       <section className="grid gap-4 lg:grid-cols-3">
-        {supportedMarkets.map((marketType) => (
-          <Panel key={marketType.title} className="p-4">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-[color:var(--text-tertiary)]">{marketType.badge}</p>
-                <h3 className="mt-2 text-xl font-semibold text-[color:var(--text-primary)]">{marketType.title}</h3>
-              </div>
-              <StatusBadge label={marketType.status} tone={marketType.tone} />
-            </div>
-            <p className="mt-3 text-sm leading-6 text-[color:var(--text-secondary)]">{marketType.description}</p>
-          </Panel>
-        ))}
+        <LandingFeature
+          icon={Radio}
+          title="Oracle-settled markets"
+          body="CoinGecko and CricAPI outcomes flow through Chainlink Functions before markets resolve on-chain."
+        />
+        <LandingFeature
+          icon={TrendingUp}
+          title="Exchange-grade board"
+          body="Indexed probabilities, liquidity, market activity, and portfolio state keep the frontend fast and consistent."
+        />
+        <LandingFeature
+          icon={Globe2}
+          title="Embeddable protocol"
+          body="Public APIs, webhooks, SDK foundations, and widgets make BharatMarket usable by external products."
+        />
       </section>
 
-      <section id="market-board" className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_330px] 2xl:items-start">
-        <div className="space-y-4">
-          <SectionHeader
-            eyebrow="Protocol Board"
-            title="Market Board"
-            description="Scan live and pending contracts, compare probability structure, and move directly into the market that matches your conviction."
-            action={
-              <div className="flex items-center gap-3">
-                <Link
-                  href="/history"
-                  className="inline-flex items-center gap-2 rounded-[14px] border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-300 transition hover:border-white/20 hover:text-white"
-                >
-                  <FolderClock className="h-4 w-4" />
-                  View archive
-                </Link>
-                <button
-                  type="button"
-                  onClick={refresh}
-                  className="inline-flex items-center gap-2 rounded-[14px] border border-violet-500/30 bg-violet-500/10 px-4 py-3 text-sm text-violet-200 transition hover:border-violet-400/40 hover:bg-violet-500/15"
-                >
-                  Refresh Board
-                  <ArrowUpRight className="h-4 w-4" />
-                </button>
+      <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px] xl:items-stretch">
+        <Panel className="overflow-hidden p-0">
+          <div className="border-b border-[color:var(--border-subtle)] px-5 py-5">
+            <p className="micro-label">Architecture</p>
+            <h2 className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-[color:var(--text-primary)]">
+              Built for oracle-first execution
+            </h2>
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-[color:var(--text-secondary)]">
+              The frontend reads indexed backend state for speed, while deterministic settlement flows through provider adapters, Chainlink Functions, and market contracts.
+            </p>
+          </div>
+          <div className="grid gap-0 divide-y divide-[color:var(--border-subtle)] lg:grid-cols-4 lg:divide-x lg:divide-y-0">
+            {architecturePath.map((item, index) => (
+              <div key={item.title} className="p-5">
+                <span className="font-mono text-[11px] text-[color:var(--text-tertiary)]">0{index + 1}</span>
+                <h3 className="mt-3 text-lg font-semibold text-[color:var(--text-primary)]">{item.title}</h3>
+                <p className="mt-2 text-sm leading-6 text-[color:var(--text-secondary)]">{item.body}</p>
               </div>
-            }
-          />
+            ))}
+          </div>
+        </Panel>
 
-          <MarketList
-            externalRefreshTick={marketRefreshTick}
-            board={{ markets: boardMarkets, total: boardMarkets.length, loading, error, warning, meta: null, refresh }}
-          />
-        </div>
+        <Panel className="p-5">
+          <p className="micro-label">Live status</p>
+          <h2 className="mt-2 text-2xl font-semibold text-[color:var(--text-primary)]">What works today</h2>
+          <div className="mt-5 grid gap-3">
+            {liveFeatures.map((feature) => (
+              <div key={feature.title} className="flex gap-3 rounded-[var(--r-md)] bg-[color:var(--surface-2)] p-3">
+                <feature.icon className="mt-0.5 h-4 w-4 shrink-0 text-[color:var(--green)]" />
+                <div>
+                  <p className="font-semibold text-[color:var(--text-primary)]">{feature.title}</p>
+                  <p className="mt-1 text-sm leading-5 text-[color:var(--text-secondary)]">{feature.body}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      </section>
 
-        <div className="space-y-4 2xl:sticky 2xl:top-28">
-          <SidebarBlock
-            eyebrow="Board Structure"
-            title="Categories in play"
-            items={[
-              ...(boardMetrics.categoryItems.length > 0
-                ? boardMetrics.categoryItems.map(([category, count]) => ({
-                    label: category,
-                    value: String(count),
-                    helper: "markets on board"
-                  }))
-                : [
-                    {
-                      label: "Categories",
-                      value: "0",
-                      helper: "markets on board"
-                    }
-                  ]),
-              {
-                label: "Live",
-                value: String(boardMetrics.activeMarkets.length),
-                helper: "tradable now"
-              },
-              {
-                label: "Awaiting",
-                value: String(boardMetrics.awaitingMarkets.length),
-                helper: "oracle queue"
-              }
-            ]}
-          />
-          <SidebarBlock
-            eyebrow="Top Movers"
-            title="Probability pressure"
-            items={boardMetrics.topMovers.map((market) => ({
-              label: market.question.length > 28 ? `${market.question.slice(0, 28)}...` : market.question,
-              value: `${Math.abs(formatProbabilityNumber(market.yesProbability) - 50).toFixed(1)}%`,
-              helper: `${market.category} • ${market.statusLabel}`
-            }))}
-          />
-        </div>
+      <section className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_420px]">
+        <Panel className="overflow-hidden p-0">
+          <div className="border-b border-[color:var(--border-subtle)] px-5 py-5">
+            <p className="micro-label">Roadmap</p>
+            <h2 className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-[color:var(--text-primary)]">From testnet exchange to protocol platform</h2>
+          </div>
+          <div className="grid gap-0 divide-y divide-[color:var(--border-subtle)] md:grid-cols-3 md:divide-x md:divide-y-0">
+            <RoadmapPhase phase="Current" title="Oracle market core" items={["Crypto + cricket", "USDC trading", "Automated resolution"]} />
+            <RoadmapPhase phase="Next" title="Developer platform" items={["API keys", "Webhooks", "SDK package"]} />
+            <RoadmapPhase phase="Later" title="Market expansion" items={["Multi-outcome", "Private markets", "Mainnet readiness"]} />
+          </div>
+        </Panel>
+
+        <section className="rounded-[32px] border border-[color:var(--border-default)] bg-[color:var(--surface-1)] px-5 py-7">
+          <Sparkles className="h-6 w-6 text-[color:var(--accent)]" />
+          <h2 className="mt-4 text-3xl font-semibold tracking-[-0.04em] text-[color:var(--text-primary)]">
+            Start trading testnet markets
+          </h2>
+          <p className="mt-3 text-sm leading-6 text-[color:var(--text-secondary)]">
+            Open the board, create a structured market, or read the technical docs.
+          </p>
+          <div className="mt-6 grid gap-3">
+            <Link href="/markets" className="inline-flex items-center justify-center gap-2 rounded-[var(--r-md)] bg-white px-5 py-3 text-sm font-semibold text-black">
+              Launch Testnet App
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+            <Link href="/docs" className="inline-flex items-center justify-center gap-2 rounded-[var(--r-md)] border border-[color:var(--border-default)] px-5 py-3 text-sm font-semibold text-[color:var(--text-primary)]">
+              Documentation
+              <FileText className="h-4 w-4" />
+            </Link>
+          </div>
+        </section>
       </section>
     </main>
   );
 }
 
-function MetricTape({
-  label,
-  value,
-  accent
+function HeroSignal({
+  icon: Icon,
+  title,
+  body
 }: {
-  label: string;
-  value: string;
-  accent: string;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-4 border-b border-white/6 pb-3 last:border-b-0 last:pb-0">
-      <p className="text-[10px] uppercase tracking-[0.24em] text-slate-500">{label}</p>
-      <p className={`font-mono text-xl font-semibold ${accent}`}>{value}</p>
-    </div>
-  );
-}
-
-function ProtocolStat({
-  label,
-  value
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-3 rounded-[var(--r-md)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] px-3 py-2.5">
-      <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-[color:var(--text-tertiary)]">{label}</p>
-      <p className="font-mono text-base font-semibold text-[color:var(--text-primary)]">{value}</p>
-    </div>
-  );
-}
-
-function RailPanel({
-  eyebrow,
-  body,
-  icon: Icon
-}: {
-  eyebrow: string;
+  icon: typeof ShieldCheck;
+  title: string;
   body: string;
-  icon: typeof Activity;
 }) {
   return (
-    <div className="rounded-[22px] bg-[linear-gradient(180deg,rgba(16,18,29,0.96),rgba(11,13,22,0.94))] px-5 py-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
-      <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.24em] text-slate-500">
-        <Icon className="h-3.5 w-3.5 text-cyan-300" />
-        {eyebrow}
+    <div className="rounded-[var(--r-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] p-4">
+      <div className="flex items-center gap-3">
+        <Icon className="h-4 w-4 text-[color:var(--green)]" />
+        <p className="font-semibold text-[color:var(--text-primary)]">{title}</p>
       </div>
-      <p className="mt-3 text-sm leading-6 text-slate-300">{body}</p>
+      <p className="mt-2 text-sm leading-6 text-[color:var(--text-secondary)]">{body}</p>
     </div>
   );
 }
 
-function SidebarBlock({
-  eyebrow,
+function LandingFeature({
+  icon: Icon,
+  title,
+  body
+}: {
+  icon: typeof Radio;
+  title: string;
+  body: string;
+}) {
+  return (
+    <Panel hover className="p-5">
+      <Icon className="h-5 w-5 text-[color:var(--blue)]" />
+      <h2 className="mt-4 text-xl font-semibold text-[color:var(--text-primary)]">{title}</h2>
+      <p className="mt-3 text-sm leading-6 text-[color:var(--text-secondary)]">{body}</p>
+    </Panel>
+  );
+}
+
+function RoadmapPhase({
+  phase,
   title,
   items
 }: {
-  eyebrow: string;
+  phase: string;
   title: string;
-  items: Array<{ label: string; value: string; helper: string }>;
+  items: string[];
 }) {
   return (
-    <div className="rounded-[var(--r-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-1)] p-4">
-      <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-[color:var(--text-tertiary)]">{eyebrow}</p>
+    <div className="p-5">
+      <p className="micro-label">{phase}</p>
       <h3 className="mt-2 text-xl font-semibold text-[color:var(--text-primary)]">{title}</h3>
-      <div className="mt-4 space-y-2">
+      <div className="mt-4 grid gap-2">
         {items.map((item) => (
-          <div key={`${item.label}-${item.value}`} className="rounded-[var(--r-md)] bg-[color:var(--surface-2)] px-3 py-3">
-            <div className="flex items-center justify-between gap-4">
-              <p className="text-sm text-[color:var(--text-secondary)]">{item.label}</p>
-              <p className="font-mono text-base font-semibold text-[color:var(--text-primary)]">{item.value}</p>
-            </div>
-            <p className="mt-1 text-xs text-[color:var(--text-tertiary)]">{item.helper}</p>
+          <div key={item} className="flex items-center gap-2 text-sm text-[color:var(--text-secondary)]">
+            <CheckCircle2 className="h-4 w-4 text-[color:var(--green)]" />
+            {item}
           </div>
         ))}
       </div>
@@ -400,52 +231,39 @@ function SidebarBlock({
   );
 }
 
-const protocolFlow = [
+const liveFeatures = [
   {
-    title: "Create Market",
-    helper: "01",
-    description: "Structured creator forms launch crypto and cricket markets with clear oracle routes and expiry windows."
+    icon: ShieldCheck,
+    title: "CoinGecko crypto settlement",
+    body: "BTC, ETH, SOL, and USDC markets resolve through provider-backed Chainlink Functions."
   },
   {
-    title: "Trade Outcomes",
-    helper: "02",
-    description: "Traders deploy capital into YES or NO positions with live probability, liquidity, and wallet-native settlement."
+    icon: Radio,
+    title: "CricAPI cricket settlement",
+    body: "Winner markets use fixture metadata and deterministic selected-team matching."
   },
   {
-    title: "Oracle Verification",
-    helper: "03",
-    description: "Chainlink Functions fetches CoinGecko or CricAPI data and normalizes a deterministic result."
-  },
-  {
-    title: "Settlement & Redemption",
-    helper: "04",
-    description: "Markets resolve on-chain, the indexer syncs state, and winning holders redeem automatically."
+    icon: TerminalSquare,
+    title: "Autonomous workers",
+    body: "Expired markets are detected, requested, indexed, and surfaced without manual hidden settlement."
   }
 ];
 
-const supportedMarkets = [
+const architecturePath = [
   {
-    title: "Crypto Markets",
-    badge: "Live",
-    status: "Production ready",
-    tone: "mint" as const,
-    description:
-      "CoinGecko-backed market creation, settlement, and redemption with price_above and price_below support."
+    title: "Create",
+    body: "Structured metadata defines category, provider, market type, target, and settlement rule."
   },
   {
-    title: "Cricket Markets",
-    badge: "Live",
-    status: "Production ready",
-    tone: "mint" as const,
-    description:
-      "CricAPI-backed winner markets for finished fixtures, resolved through the same indexed and on-chain pipeline."
+    title: "Trade",
+    body: "Users trade YES/NO and add liquidity with wallet-native USDC execution."
   },
   {
-    title: "Election Markets",
-    badge: "Future",
-    status: "Coming Soon",
-    tone: "gold" as const,
-    description:
-      "Intentionally future-facing and marked as not production-enabled until a verified election oracle is added."
+    title: "Verify",
+    body: "Chainlink Functions fetches provider data after expiry and normalizes the outcome."
+  },
+  {
+    title: "Index",
+    body: "Backend workers persist market, oracle, portfolio, and redemption-ready state."
   }
 ];

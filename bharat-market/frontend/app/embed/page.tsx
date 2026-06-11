@@ -15,8 +15,8 @@ export default async function EmbedLandingPage() {
     latestMarketAddress.toLowerCase() === ZERO_ADDRESS ? "/embed/board" : `/embed/market/${latestMarketAddress}`;
 
   return (
-    <main className="space-y-4 pb-12">
-      <Panel className="p-5">
+    <main className="page-stack">
+      <Panel className="protocol-card-strong p-5">
         <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-[color:var(--blue)]">Embeds</p>
         <h1 className="mt-2 text-2xl font-semibold text-[color:var(--text-primary)]">
           BharatMarket widgets for external products
@@ -29,7 +29,7 @@ export default async function EmbedLandingPage() {
         <div className="mt-5 grid gap-4 md:grid-cols-2">
           <Link
             href="/embed/board"
-            className="rounded-[var(--r-lg)] border border-[color:var(--border-default)] bg-[color:var(--surface-2)] p-4 transition hover:border-[color:var(--accent-border)]"
+            className="rounded-[var(--r-lg)] border border-[color:var(--border-default)] bg-[color:var(--surface-2)] p-4 transition hover:-translate-y-0.5 hover:border-[color:var(--accent-border)]"
           >
             <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-[color:var(--text-tertiary)]">Board Widget</p>
             <p className="mt-2 text-lg font-semibold text-[color:var(--text-primary)]">Live market board</p>
@@ -37,7 +37,7 @@ export default async function EmbedLandingPage() {
           </Link>
           <Link
             href={marketHref}
-            className="rounded-[var(--r-lg)] border border-[color:var(--border-default)] bg-[color:var(--surface-2)] p-4 transition hover:border-[color:var(--accent-border)]"
+            className="rounded-[var(--r-lg)] border border-[color:var(--border-default)] bg-[color:var(--surface-2)] p-4 transition hover:-translate-y-0.5 hover:border-[color:var(--accent-border)]"
           >
             <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-[color:var(--text-tertiary)]">Market Widget</p>
             <p className="mt-2 text-lg font-semibold text-[color:var(--text-primary)]">Single market card</p>

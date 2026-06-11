@@ -162,7 +162,7 @@ export function PortfolioDashboard() {
         description="Take a position, add liquidity, or resolve a market and your account center will start tracking it here."
         action={
           <Link
-            href="/"
+            href="/markets"
             className="rounded-2xl border border-gold/30 bg-gold/15 px-4 py-3 font-semibold text-gold"
           >
             Explore Markets
@@ -404,7 +404,7 @@ export function PortfolioDashboard() {
             eyebrow="Execution"
             body={
               <div className="space-y-3">
-                <QuickLink href="/" label="Open Markets" description="Scan the active board and deploy new capital." />
+                <QuickLink href="/markets" label="Open Markets" description="Scan the active board and deploy new capital." />
                 <QuickLink href="/history" label="Review Archive" description="Inspect resolved contracts and closed outcomes." />
                 <QuickLink href="/create-market" label="Create Market" description="Launch a new sports-first prediction contract." />
               </div>

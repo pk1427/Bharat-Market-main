@@ -8,6 +8,7 @@ import {
   CandlestickChart,
   ChevronDown,
   Copy,
+  FileText,
   FolderClock,
   LogOut,
   LayoutGrid,
@@ -29,10 +30,11 @@ import { formatUsdc, shortenAddress } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { href: "/", label: "Markets", icon: CandlestickChart },
+  { href: "/markets", label: "Markets", icon: CandlestickChart },
   { href: "/history", label: "History", icon: FolderClock },
   { href: "/create-market", label: "Create", icon: PlusSquare },
-  { href: "/embed", label: "Embeds", icon: LayoutGrid }
+  { href: "/embed", label: "Embeds", icon: LayoutGrid },
+  { href: "/docs", label: "Docs", icon: FileText }
 ];
 
 export function WalletBar() {
@@ -102,26 +104,21 @@ export function WalletBar() {
   }
 
   return (
-    <div className="sticky top-0 z-50 -mx-3 mb-6 border-b border-[color:var(--border-subtle)] bg-[color:var(--surface-1)] px-3 sm:-mx-5 sm:px-5 lg:-mx-8 lg:px-8">
-      <div className="mx-auto max-w-[1440px]">
-        <div className="grid min-h-[52px] gap-3 xl:grid-cols-[240px_minmax(0,1fr)_390px] xl:items-center">
+    <div className="sticky top-3 z-50 mb-7">
+      <div className="mx-auto max-w-[1320px] rounded-[24px] border border-[color:var(--border-default)] bg-[rgba(10,10,18,0.86)] px-4 shadow-[0_18px_70px_rgba(0,0,0,0.36),inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-2xl">
+        <div className="grid min-h-[70px] gap-3 lg:grid-cols-[250px_minmax(0,1fr)_auto] lg:items-center">
           <div className="flex items-center gap-3">
             <Link href="/" className="flex items-center gap-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-[var(--r-md)] border border-[color:var(--accent-border)] bg-[color:var(--accent-dim)]">
+              <div className="flex h-9 w-9 items-center justify-center rounded-[var(--r-md)] border border-[color:var(--accent-border)] bg-[color:var(--accent-dim)]">
                 <span className="text-lg leading-none text-[color:var(--accent)]">◆</span>
               </div>
               <div>
-                <p className="font-heading text-base font-semibold text-[color:var(--text-primary)]">BharatMarket</p>
-                <div className="mt-0.5 flex items-center gap-2">
-                  <span className="text-[10px] uppercase tracking-[0.08em] text-[color:var(--text-tertiary)]">
-                    Sports prediction exchange
-                  </span>
-                </div>
+                <p className="font-heading text-lg font-bold tracking-[-0.03em] text-[color:var(--text-primary)]">BharatMarket</p>
               </div>
             </Link>
           </div>
 
-          <nav className="hidden items-center justify-center gap-6 xl:flex">
+          <nav className="order-3 -mx-1 flex items-center gap-1 overflow-x-auto pb-3 lg:order-none lg:mx-0 lg:justify-center lg:gap-8 lg:overflow-visible lg:pb-0">
             {navItems.map((item) => {
               const active =
                 item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
@@ -132,8 +129,10 @@ export function WalletBar() {
                   key={item.label}
                   href={item.href}
                   className={cn(
-                    "group relative inline-flex h-[52px] items-center gap-2 text-sm font-medium transition",
-                    active ? "text-[color:var(--text-primary)]" : "text-[color:var(--text-tertiary)] hover:text-[color:var(--text-secondary)]"
+                    "group relative inline-flex h-10 shrink-0 items-center gap-2 rounded-[var(--r-md)] px-3 text-[12px] font-bold uppercase tracking-[0.16em] transition lg:h-[70px] lg:rounded-none lg:px-0",
+                    active
+                      ? "bg-[color:var(--surface-2)] text-[color:var(--text-primary)] lg:bg-transparent"
+                      : "text-[color:var(--text-secondary)] hover:bg-[color:var(--surface-2)] hover:text-[color:var(--text-primary)] lg:hover:bg-transparent"
                   )}
                 >
                   <Icon className="relative z-10 h-4 w-4" />
@@ -141,7 +140,7 @@ export function WalletBar() {
                   {active ? (
                     <motion.span
                       layoutId="nav-active-underline"
-                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-[color:var(--accent)]"
+                      className="absolute bottom-0 left-2 right-2 h-0.5 rounded-full bg-[color:var(--accent)] lg:left-0 lg:right-0"
                     />
                   ) : null}
                 </Link>
@@ -155,7 +154,7 @@ export function WalletBar() {
                 <button
                   type="button"
                   onClick={() => setMenuOpen((value) => !value)}
-                  className="inline-flex items-center gap-3 rounded-[var(--r-md)] border border-[color:var(--border-default)] bg-[color:var(--surface-2)] px-3 py-2 text-left transition hover:border-[color:var(--border-strong)]"
+                  className="inline-flex items-center gap-3 rounded-full border border-[color:var(--accent-border)] bg-[rgba(7,7,13,0.72)] px-3 py-2 text-left transition hover:border-[color:var(--border-strong)]"
                 >
                   <Shield className="h-4 w-4 text-[color:var(--text-tertiary)]" />
                   <div className="hidden min-w-[88px] sm:block">
@@ -167,7 +166,7 @@ export function WalletBar() {
                     <span className="font-mono text-sm text-[color:var(--text-primary)]">{shortenAddress(address)}</span>
                     <span
                       className={cn(
-                        "inline-flex items-center gap-1.5 rounded-full border px-2 py-1 font-mono text-[10px] uppercase tracking-[0.08em]",
+                        "inline-flex items-center gap-1.5 rounded-full border px-2 py-1 font-mono text-[10px] uppercase tracking-[0.12em]",
                         onExpectedNetwork
                           ? "border-[color:var(--accent-border)] bg-[color:var(--accent-dim)] text-[color:var(--text-secondary)]"
                           : "border-[color:rgba(245,65,90,0.35)] bg-[color:var(--red-dim)] text-[color:var(--red)]"

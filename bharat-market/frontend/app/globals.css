@@ -4,10 +4,10 @@
 
 :root {
   color-scheme: dark;
-  --surface-0: #08080e;
-  --surface-1: #0f0f18;
-  --surface-2: #161622;
-  --surface-3: #1e1e2e;
+  --surface-0: #07070d;
+  --surface-1: #0e0e17;
+  --surface-2: #151521;
+  --surface-3: #1d1d2c;
   --border-subtle: rgba(255, 255, 255, 0.06);
   --border-default: rgba(255, 255, 255, 0.1);
   --border-strong: rgba(255, 255, 255, 0.18);
@@ -57,7 +57,10 @@ body {
   min-height: 100vh;
   color: var(--text-primary);
   font-family: var(--font-body), "Segoe UI", system-ui, sans-serif;
-  background: var(--surface-0);
+  background:
+    radial-gradient(circle at 12% -8%, rgba(124, 92, 252, 0.2), transparent 30rem),
+    radial-gradient(circle at 86% 2%, rgba(34, 217, 138, 0.12), transparent 24rem),
+    linear-gradient(180deg, #090910 0%, var(--surface-0) 38%, #050509 100%);
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -74,6 +77,17 @@ body::before {
   background-size: 48px 48px;
   pointer-events: none;
   opacity: 0.26;
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 18rem),
+    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.04), transparent 22rem);
+  opacity: 0.7;
 }
 
 a {
@@ -101,6 +115,58 @@ a {
   position: relative;
   overflow: hidden;
   background: var(--surface-1);
+}
+
+.app-shell {
+  position: relative;
+  isolation: isolate;
+}
+
+.page-stack {
+  display: grid;
+  gap: 1.25rem;
+  padding-bottom: 3rem;
+}
+
+.protocol-card {
+  border: 1px solid var(--border-subtle);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent),
+    var(--surface-1);
+}
+
+.protocol-card-strong {
+  border: 1px solid var(--border-default);
+  background:
+    radial-gradient(circle at top left, rgba(124, 92, 252, 0.1), transparent 18rem),
+    var(--surface-2);
+}
+
+.field-control {
+  width: 100%;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border-default);
+  background: rgba(7, 7, 13, 0.72);
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.field-control:focus {
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+
+.field-control::placeholder {
+  color: var(--text-tertiary);
+}
+
+.micro-label {
+  font-family: var(--font-mono), "SFMono-Regular", Consolas, monospace;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
 }
 
 .glass {

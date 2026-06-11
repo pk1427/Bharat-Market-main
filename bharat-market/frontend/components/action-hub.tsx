@@ -409,7 +409,7 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
   }, [createForm.durationMinutes]);
 
   return (
-    <section className="grid gap-4 xl:grid-cols-[minmax(0,1.18fr)_minmax(340px,0.82fr)] xl:items-start">
+    <section className="grid gap-4 xl:grid-cols-[minmax(0,1.08fr)_minmax(360px,0.92fr)] xl:items-start">
       <Panel className="p-4 sm:p-5">
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -421,8 +421,8 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
               Build an oracle-settled market
             </h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-[color:var(--text-secondary)]">
-              Launch crypto markets with structured metadata, CoinGecko verification, and Chainlink Functions settlement.
-              Cricket and election routes stay visible as future provider slots, but crypto is the live autonomous path.
+              Launch crypto and cricket markets with structured metadata, provider verification, and Chainlink Functions settlement.
+              Election routes stay visible as a future provider slot until verified result sources are enabled.
             </p>
           </div>
 
@@ -446,7 +446,7 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
               value={createForm.question}
               onChange={(event) => setCreateForm((current) => ({ ...current, question: event.target.value }))}
               placeholder={generatedQuestion || "Will Mumbai Indians beat KKR today?"}
-              className="w-full rounded-[var(--r-md)] border border-[color:var(--border-default)] bg-[color:var(--surface-0)] px-4 py-3 text-sm text-[color:var(--text-primary)] outline-none transition placeholder:text-[color:var(--text-tertiary)] focus:border-[color:var(--accent-border)]"
+              className="field-control px-4 py-3 text-sm"
             />
             <p className="text-xs text-slate-500">
               Phrase the contract so the answer resolves clearly to YES or NO.
@@ -483,7 +483,7 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
                 <select
                   value={createForm.cryptoAsset}
                   onChange={(event) => setCreateForm((current) => ({ ...current, cryptoAsset: event.target.value, question: shouldRegenerateQuestion(current.question) ? "" : current.question }))}
-                  className="w-full rounded-[16px] border border-white/10 bg-slate-950/60 px-4 py-4 text-base text-white outline-none transition focus:border-violet-400/35"
+                  className="field-control px-4 py-3 text-sm"
                 >
                   <option value="ETH">Ethereum</option>
                   <option value="BTC">Bitcoin</option>
@@ -497,7 +497,7 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
                 <select
                   value={createForm.cryptoDirection}
                   onChange={(event) => setCreateForm((current) => ({ ...current, cryptoDirection: event.target.value, question: shouldRegenerateQuestion(current.question) ? "" : current.question }))}
-                  className="w-full rounded-[16px] border border-white/10 bg-slate-950/60 px-4 py-4 text-base text-white outline-none transition focus:border-violet-400/35"
+                  className="field-control px-4 py-3 text-sm"
                 >
                   <option value="price_above">above</option>
                   <option value="price_below">below</option>
@@ -542,7 +542,7 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
                   setCreateForm((current) => ({ ...current, durationMinutes: event.target.value }))
                 }
                 placeholder="180"
-                className="w-full rounded-[16px] border border-white/10 bg-slate-950/60 px-4 py-4 text-base text-white outline-none transition placeholder:text-slate-600 focus:border-violet-400/35"
+                className="field-control px-4 py-3 text-sm"
               />
             </div>
 
@@ -619,14 +619,14 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
           </div>
 
           <div className="grid gap-3 lg:grid-cols-2">
-            <div className="rounded-[16px] border border-white/8 bg-white/[0.03] p-4">
+            <div className="rounded-[var(--r-md)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] p-3.5">
               <div className="flex items-center gap-2 text-slate-400">
                 <TimerReset className="h-4 w-4" />
                 <p className="text-[10px] uppercase tracking-[0.16em]">Duration Summary</p>
               </div>
               <p className="mt-3 text-sm text-white">{durationLabel}</p>
             </div>
-            <div className="rounded-[16px] border border-white/8 bg-white/[0.03] p-4">
+            <div className="rounded-[var(--r-md)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] p-3.5">
               <div className="flex items-center gap-2 text-slate-400">
                 <ShieldCheck className="h-4 w-4" />
                 <p className="text-[10px] uppercase tracking-[0.16em]">Settlement Route</p>
@@ -642,7 +642,7 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
               onClick={handleApproveCreationFee}
               disabled={!address || !addresses || busy || hasCreationApproval || !hasGasForApproval}
               tone="mint"
-              className="justify-center py-4"
+              className="justify-center py-3.5"
             >
               {approveConfirming
                 ? "Approving..."
@@ -655,7 +655,7 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
               onClick={handleCreateMarket}
               disabled={!address || !addresses || busy || !hasCreationApproval || !hasEnoughUsdc || !hasGasForCreation || Boolean(creationBlockedReason)}
               tone="gold"
-              className="justify-center py-4"
+              className="justify-center py-3.5"
             >
               {createConfirming ? "Creating..." : "Create Market"}
             </ActionButton>
@@ -687,14 +687,14 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
         </div>
       </Panel>
 
-      <div className="space-y-3">
+      <div className="space-y-3 xl:sticky xl:top-24">
         <Panel className="p-3.5 sm:p-4">
           <p className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.08em] text-[color:var(--accent)]">
             <span className="h-1.5 w-1.5 rounded-full bg-violet-500 shadow-[0_0_8px_rgba(124,58,237,0.95)]" />
             Preview
           </p>
 
-          <div className="mt-3 space-y-2.5">
+          <div className="mt-3 space-y-2">
             <div className="rounded-[var(--r-md)] border border-[color:var(--border-default)] bg-[color:var(--surface-2)] p-3">
               <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-[color:var(--text-tertiary)]">Question</p>
               <p className="mt-2 text-sm font-semibold text-[color:var(--text-primary)]">
@@ -845,7 +845,7 @@ function Field({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className="w-full rounded-[16px] border border-white/10 bg-slate-950/60 px-4 py-4 text-base text-white outline-none transition placeholder:text-slate-600 focus:border-violet-400/35"
+        className="field-control px-4 py-3 text-sm"
       />
     </div>
   );
@@ -868,21 +868,21 @@ function CategoryButton({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-[20px] border px-4 py-4 text-left transition ${
+      className={`rounded-[var(--r-lg)] border px-4 py-3.5 text-left transition ${
         active
           ? "border-mint/30 bg-[linear-gradient(135deg,rgba(95,242,191,0.16),rgba(95,242,191,0.05))] text-white shadow-[0_0_28px_rgba(95,242,191,0.08)]"
           : "border-white/10 bg-white/[0.03] text-slate-300 hover:border-white/20 hover:text-white"
       }`}
     >
       <div className="flex items-center justify-between gap-3">
-        <p className="font-heading text-xl uppercase">{title}</p>
+        <p className="font-heading text-base font-semibold uppercase">{title}</p>
         <span className={`rounded-full px-2 py-1 text-[9px] uppercase tracking-[0.2em] ${
           ready ? "bg-mint/15 text-mint" : "bg-gold/10 text-gold"
         }`}>
           {ready ? "Live" : "Soon"}
         </span>
       </div>
-      <p className="mt-2 text-xs uppercase tracking-[0.18em] text-slate-500">{subtitle}</p>
+      <p className="mt-2 text-[11px] uppercase tracking-[0.16em] text-slate-500">{subtitle}</p>
     </button>
   );
 }
@@ -983,7 +983,7 @@ function PreviewMetric({
   value: string;
 }) {
   return (
-    <div className="rounded-[var(--r-md)] border border-[color:var(--border-default)] bg-[color:var(--surface-2)] p-3">
+    <div className="rounded-[var(--r-md)] border border-[color:var(--border-default)] bg-[color:var(--surface-2)] p-2.5">
       <div className="flex items-center gap-2 text-[color:var(--text-tertiary)]">
         <Icon className="h-3.5 w-3.5" />
         <p className="font-mono text-[10px] uppercase tracking-[0.08em]">{label}</p>
