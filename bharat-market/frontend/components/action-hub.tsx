@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { type PublicClient, formatEther, parseEther, parseUnits } from "viem";
-import { ArrowUpRight, CheckCircle2, Coins, FileText, LockKeyhole, ShieldCheck, Sparkles, TimerReset, WalletCards } from "lucide-react";
+import { ArrowUpRight, CalendarClock, Coins, Search, ShieldCheck, TimerReset, WalletCards } from "lucide-react";
 import { useAccount, usePublicClient, useWriteContract } from "wagmi";
 
 import { ActionButton } from "@/components/ui/action-button";
@@ -24,28 +24,51 @@ import {
 } from "@/lib/oracle-metadata";
 import { dismissTxToast, failTxToast, handleTxToast, settleTxToast } from "@/lib/tx-toasts";
 
+type CricketFixture = {
+  id: string;
+  name: string;
+  matchType: string;
+  status: string | null;
+  venue: string | null;
+  dateTimeGMT: string;
+  teams: string[];
+  teamA: string;
+  teamB: string;
+  league: string;
+};
+
+type CricketFixtureWindow = "24h" | "7d" | "all";
+
+const defaultCreateForm = {
+  question: "",
+  category: "crypto" as OracleCategory,
+  cryptoAsset: "ETH",
+  cryptoTargetPrice: "5000",
+  cryptoDirection: "price_above",
+  cricketProvider: "cricapi",
+  cricketMatchId: "",
+  cricketLeague: "",
+  cricketTeamA: "",
+  cricketTeamB: "",
+  cricketSelectedTeam: "",
+  electionId: "",
+  electionCandidate: "",
+  electionRegion: "",
+  electionType: "winner",
+  durationMinutes: "180"
+};
+
 export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void }) {
   const { address } = useAccount();
   const publicClient = usePublicClient();
   const addresses = useMemo(() => getRequiredAddresses(), []);
-  const [createForm, setCreateForm] = useState({
-    question: "",
-    category: "crypto" as OracleCategory,
-    cryptoAsset: "ETH",
-    cryptoTargetPrice: "5000",
-    cryptoDirection: "price_above",
-    cricketProvider: "cricapi",
-    cricketMatchId: "mi_vs_kkr",
-    cricketLeague: "IPL",
-    cricketTeamA: "MI",
-    cricketTeamB: "KKR",
-    cricketSelectedTeam: "MI",
-    electionId: "",
-    electionCandidate: "",
-    electionRegion: "",
-    electionType: "winner",
-    durationMinutes: "180"
-  });
+  const [createForm, setCreateForm] = useState(defaultCreateForm);
+  const [cricketFixtures, setCricketFixtures] = useState<CricketFixture[]>([]);
+  const [cricketFixtureSearch, setCricketFixtureSearch] = useState("");
+  const [cricketFixtureWindow, setCricketFixtureWindow] = useState<CricketFixtureWindow>("24h");
+  const [cricketFixturesLoading, setCricketFixturesLoading] = useState(false);
+  const [cricketFixtureError, setCricketFixtureError] = useState<string | null>(null);
+  const [showCricketAdvanced, setShowCricketAdvanced] = useState(false);
   const [mintHash, setMintHash] = useState<`0x${string}` | undefined>();
   const [approveHash, setApproveHash] = useState<`0x${string}` | undefined>();
   const [createHash, setCreateHash] = useState<`0x${string}` | undefined>();
@@ -131,8 +154,11 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
   const contractOracleType =
     createForm.category === "cricket" ? "sports" : createForm.category;
   const generatedQuestion = oracleMetadata ? buildOracleQuestion(oracleMetadata) : "";
+  const questionPlaceholder =
+    createForm.category === "cricket"
+      ? "Select a fixture and YES side to generate the market question"
+      : generatedQuestion || "Will ETH be above $5,000 at settlement?";
   const questionToCreate = createForm.question.trim() || generatedQuestion;
-  const categoryResolutionReady = createForm.category === "crypto" || createForm.category === "cricket";
   const settlementRouteLabel =
     createForm.category === "crypto"
       ? "CoinGecko -> Chainlink -> on-chain resolution"
@@ -143,6 +169,12 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
     structuredOracleCreationEnabled && createForm.category === "election"
       ? "Election markets are not production-enabled yet."
       : null;
+  const cricketWindowLabel =
+    cricketFixtureWindow === "24h"
+      ? "CricAPI fixtures starting in the next 24 hours"
+      : cricketFixtureWindow === "7d"
+        ? "CricAPI fixtures starting in the next 7 days"
+        : "All upcoming CricAPI fixtures from the scanned schedule";
 
   useEffect(() => {
     let cancelled = false;
@@ -196,6 +228,64 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
       cancelled = true;
     };
   }, [address, addresses, walletRefreshNonce]);
+
+  useEffect(() => {
+    if (createForm.category !== "cricket") return;
+
+    let cancelled = false;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(async () => {
+      try {
+        setCricketFixturesLoading(true);
+        setCricketFixtureError(null);
+        const params = new URLSearchParams({ limit: "12", window: cricketFixtureWindow });
+        if (cricketFixtureSearch.trim()) {
+          params.set("search", cricketFixtureSearch.trim());
+        }
+
+        const response = await fetch(`/api/oracles/cricket/fixtures?${params.toString()}`, {
+          cache: "no-store",
+          signal: controller.signal
+        });
+        const payload = (await response.json()) as { data?: CricketFixture[]; error?: string };
+        if (!response.ok) {
+          throw new Error(payload.error ?? "Unable to load upcoming cricket fixtures.");
+        }
+
+        if (!cancelled) {
+          setCricketFixtures(Array.isArray(payload.data) ? payload.data : []);
+          setCricketFixturesLoading(false);
+        }
+      } catch (err) {
+        if (!cancelled && !controller.signal.aborted) {
+          setCricketFixtureError(err instanceof Error ? err.message : "Unable to load upcoming cricket fixtures.");
+          setCricketFixturesLoading(false);
+        }
+      }
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [createForm.category, cricketFixtureSearch, cricketFixtureWindow]);
+
+  function selectCricketFixture(fixture: CricketFixture, selectedTeam = fixture.teamA) {
+    const opponent = selectedTeam === fixture.teamA ? fixture.teamB : fixture.teamA;
+    setCreateForm((current) => ({
+      ...current,
+      category: "cricket",
+      question: shouldRegenerateCricketQuestion(current.question) ? `Will ${selectedTeam} beat ${opponent}?` : current.question,
+      cricketProvider: "cricapi",
+      cricketMatchId: fixture.id,
+      cricketLeague: fixture.league,
+      cricketTeamA: fixture.teamA,
+      cricketTeamB: fixture.teamB,
+      cricketSelectedTeam: selectedTeam,
+      durationMinutes: suggestDurationMinutes(fixture.dateTimeGMT)
+    }));
+  }
 
   async function handleMintUsdc() {
     const client = publicClient;
@@ -372,22 +462,7 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
       setStatusTone("success");
       onMarketCreated?.();
       setCreateForm({
-        question: "",
-        category: "crypto",
-        cryptoAsset: "ETH",
-        cryptoTargetPrice: "5000",
-        cryptoDirection: "price_above",
-        cricketProvider: "cricapi",
-        cricketMatchId: "mi_vs_kkr",
-        cricketLeague: "IPL",
-        cricketTeamA: "MI",
-        cricketTeamB: "KKR",
-        cricketSelectedTeam: "MI",
-        electionId: "",
-        electionCandidate: "",
-        electionRegion: "",
-        electionType: "winner",
-        durationMinutes: "180"
+        ...defaultCreateForm
       });
       setWalletRefreshNonce((value) => value + 1);
     } catch (err) {
@@ -409,20 +484,68 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
   }, [createForm.durationMinutes]);
 
   return (
-    <section className="grid gap-4 xl:grid-cols-[minmax(0,1.08fr)_minmax(360px,0.92fr)] xl:items-start">
+    <>
+      <Panel className="p-4 sm:p-5">
+        <div className="mx-auto max-w-5xl text-center">
+          <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[color:var(--accent)]">
+            Step 1 / Market Type
+          </p>
+          <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-white">
+            What kind of market are you creating?
+          </h2>
+          <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-[color:var(--text-secondary)]">
+            Pick the settlement route first. BharatMarket will show only the inputs needed for that oracle path.
+          </p>
+        </div>
+
+        <div className="mx-auto mt-5 grid max-w-5xl gap-3 md:grid-cols-3">
+          <CategoryButton
+            active={createForm.category === "crypto"}
+            title="Crypto"
+            subtitle="CoinGecko price markets"
+            description="BTC, ETH, SOL, and USDC rules with price-above or price-below settlement."
+            ready
+            onClick={() => setCreateForm((current) => ({ ...current, category: "crypto" }))}
+          />
+          <CategoryButton
+            active={createForm.category === "cricket"}
+            title="Cricket"
+            subtitle="CricAPI fixture markets"
+            description="Pick a real upcoming fixture and choose which team resolves YES."
+            ready
+            onClick={() => setCreateForm((current) => ({ ...current, category: "cricket" }))}
+          />
+          <CategoryButton
+            active={createForm.category === "election"}
+            title="Election"
+            subtitle="Future oracle route"
+            description="Architecture is reserved, but production settlement is intentionally disabled."
+            onClick={() => setCreateForm((current) => ({ ...current, category: "election" }))}
+          />
+        </div>
+      </Panel>
+
+    <section className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.55fr)] xl:items-start">
       <Panel className="p-4 sm:p-5">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.08em] text-[color:var(--accent)]">
               <span className="h-1.5 w-1.5 rounded-full bg-violet-500 shadow-[0_0_8px_rgba(124,58,237,0.95)]" />
-              Creator Form
+              Step 2 / Configure
             </p>
             <h2 className="mt-3 text-2xl font-semibold leading-tight text-[color:var(--text-primary)]">
-              Build an oracle-settled market
+              {createForm.category === "crypto"
+                ? "Configure crypto settlement"
+                : createForm.category === "cricket"
+                  ? "Choose fixture and outcome"
+                  : "Election route preview"}
             </h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-[color:var(--text-secondary)]">
-              Launch crypto and cricket markets with structured metadata, provider verification, and Chainlink Functions settlement.
-              Election routes stay visible as a future provider slot until verified result sources are enabled.
+              {createForm.category === "crypto"
+                ? "Set the asset, target price, direction, and expiry window. BharatMarket converts it into deterministic CoinGecko oracle metadata."
+                : createForm.category === "cricket"
+                  ? "Search provider fixtures, select a YES side, then review the generated CricAPI settlement rule before deployment."
+                  : "Election markets stay visible as a future provider slot until verified result sources are enabled."}
             </p>
           </div>
 
@@ -437,15 +560,30 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
           ) : null}
         </div>
 
-        <div className="mt-5 grid gap-4">
-          <div className="grid gap-2">
+        <div className="mt-5 grid gap-5">
+          <div className="rounded-[22px] border border-white/10 bg-white/[0.025] p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-slate-500">Question</p>
+                <p className="mt-1 text-sm text-slate-400">Use the generated question or write a clearer version.</p>
+              </div>
+              {generatedQuestion ? (
+                <button
+                  type="button"
+                  onClick={() => setCreateForm((current) => ({ ...current, question: generatedQuestion }))}
+                  className="hidden rounded-full border border-white/10 bg-white/[0.03] px-3 py-2 text-[11px] font-semibold text-slate-300 transition hover:border-white/20 hover:text-white sm:inline-flex"
+                >
+                  Use generated
+                </button>
+              ) : null}
+            </div>
             <label className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
               Market Question
             </label>
             <input
               value={createForm.question}
               onChange={(event) => setCreateForm((current) => ({ ...current, question: event.target.value }))}
-              placeholder={generatedQuestion || "Will Mumbai Indians beat KKR today?"}
+              placeholder={questionPlaceholder}
               className="field-control px-4 py-3 text-sm"
             />
             <p className="text-xs text-slate-500">
@@ -453,55 +591,118 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
             </p>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-3">
-            <CategoryButton
-              active={createForm.category === "crypto"}
-              title="Crypto"
-              subtitle="CoinGecko live"
-              ready
-              onClick={() => setCreateForm((current) => ({ ...current, category: "crypto" }))}
-            />
-            <CategoryButton
-              active={createForm.category === "cricket"}
-              title="Cricket"
-              subtitle="CricAPI live"
-              ready
-              onClick={() => setCreateForm((current) => ({ ...current, category: "cricket" }))}
-            />
-            <CategoryButton
-              active={createForm.category === "election"}
-              title="Election"
-              subtitle="Architecture only"
-              onClick={() => setCreateForm((current) => ({ ...current, category: "election" }))}
-            />
-          </div>
-
           {createForm.category === "crypto" ? (
-            <div className="grid gap-4 md:grid-cols-3">
-              <div className="grid gap-2">
-                <label className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Asset</label>
-                <select
-                  value={createForm.cryptoAsset}
-                  onChange={(event) => setCreateForm((current) => ({ ...current, cryptoAsset: event.target.value, question: shouldRegenerateQuestion(current.question) ? "" : current.question }))}
-                  className="field-control px-4 py-3 text-sm"
-                >
-                  <option value="ETH">Ethereum</option>
-                  <option value="BTC">Bitcoin</option>
-                  <option value="SOL">Solana</option>
-                  <option value="USDC">USD Coin</option>
-                </select>
+            <div className="overflow-hidden rounded-[24px] border border-violet-400/15 bg-[radial-gradient(circle_at_top_left,rgba(124,58,237,0.16),transparent_34%),rgba(255,255,255,0.025)]">
+              <div className="border-b border-white/10 p-4">
+                <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-violet-200">Crypto Rule Builder</p>
+                <h3 className="mt-1 text-lg font-semibold text-white">Define the price condition</h3>
+                <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-400">
+                  Choose an asset, target, and direction. BharatMarket converts this into a CoinGecko + Chainlink settlement rule.
+                </p>
               </div>
-              <Field label="Target Price" value={createForm.cryptoTargetPrice} onChange={(value) => setCreateForm((current) => ({ ...current, cryptoTargetPrice: value, question: shouldRegenerateQuestion(current.question) ? "" : current.question }))} placeholder="5000" />
-              <div className="grid gap-2">
-                <label className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Direction</label>
-                <select
-                  value={createForm.cryptoDirection}
-                  onChange={(event) => setCreateForm((current) => ({ ...current, cryptoDirection: event.target.value, question: shouldRegenerateQuestion(current.question) ? "" : current.question }))}
-                  className="field-control px-4 py-3 text-sm"
-                >
-                  <option value="price_above">above</option>
-                  <option value="price_below">below</option>
-                </select>
+
+              <div className="grid gap-4 p-4">
+                <div>
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-slate-500">1. Asset</p>
+                    <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-1 text-[10px] text-slate-400">
+                      CoinGecko
+                    </span>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                    {[
+                      { symbol: "ETH", name: "Ethereum", hint: "Large-cap crypto" },
+                      { symbol: "BTC", name: "Bitcoin", hint: "Benchmark asset" },
+                      { symbol: "SOL", name: "Solana", hint: "High-beta L1" },
+                      { symbol: "USDC", name: "USD Coin", hint: "Stablecoin parity" }
+                    ].map((asset) => (
+                      <CryptoAssetOption
+                        key={asset.symbol}
+                        active={createForm.cryptoAsset === asset.symbol}
+                        symbol={asset.symbol}
+                        name={asset.name}
+                        hint={asset.hint}
+                        onClick={() =>
+                          setCreateForm((current) => ({
+                            ...current,
+                            cryptoAsset: asset.symbol,
+                            question: shouldRegenerateQuestion(current.question) ? "" : current.question
+                          }))
+                        }
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+                  <div className="rounded-[18px] border border-white/10 bg-black/20 p-4">
+                    <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-slate-500">2. Direction</p>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      <DirectionChoice
+                        active={createForm.cryptoDirection === "price_above"}
+                        label="Above"
+                        detail="YES if price is at or above target"
+                        onClick={() =>
+                          setCreateForm((current) => ({
+                            ...current,
+                            cryptoDirection: "price_above",
+                            question: shouldRegenerateQuestion(current.question) ? "" : current.question
+                          }))
+                        }
+                      />
+                      <DirectionChoice
+                        active={createForm.cryptoDirection === "price_below"}
+                        label="Below"
+                        detail="YES if price is at or below target"
+                        onClick={() =>
+                          setCreateForm((current) => ({
+                            ...current,
+                            cryptoDirection: "price_below",
+                            question: shouldRegenerateQuestion(current.question) ? "" : current.question
+                          }))
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div className="rounded-[18px] border border-white/10 bg-black/20 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-slate-500">3. Target price</p>
+                      <span className="text-xs text-slate-500">USD</span>
+                    </div>
+                    <div className="mt-3">
+                      <input
+                        value={createForm.cryptoTargetPrice}
+                        onChange={(event) => setCreateForm((current) => ({ ...current, cryptoTargetPrice: event.target.value, question: shouldRegenerateQuestion(current.question) ? "" : current.question }))}
+                        placeholder="5000"
+                        inputMode="decimal"
+                        className="field-control w-full px-4 py-4 text-lg font-semibold"
+                      />
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {["2000", "3000", "5000", "100000"].map((price) => (
+                        <button
+                          key={price}
+                          type="button"
+                          onClick={() => setCreateForm((current) => ({ ...current, cryptoTargetPrice: price, question: shouldRegenerateQuestion(current.question) ? "" : current.question }))}
+                          className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-slate-300 transition hover:border-white/20 hover:text-white"
+                        >
+                          ${Number(price).toLocaleString("en-US")}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-[18px] border border-mint/15 bg-mint/[0.05] p-4">
+                  <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-mint">Generated rule</p>
+                  <p className="mt-2 text-sm font-semibold text-white">
+                    {oracleMetadata?.category === "crypto" ? oracleMetadata.settlementRule : "Complete the crypto rule to generate settlement metadata."}
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-slate-400">
+                    Chainlink Functions fetches the provider price after expiry and returns the deterministic YES/NO outcome.
+                  </p>
+                </div>
               </div>
             </div>
           ) : null}
@@ -513,12 +714,149 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
           ) : null}
 
           {createForm.category === "cricket" ? (
-            <div className="grid gap-4 md:grid-cols-3">
-              <Field label="Fixture ID" value={createForm.cricketMatchId} onChange={(value) => setCreateForm((current) => ({ ...current, cricketMatchId: value }))} placeholder="ipl_2026_42" />
-              <Field label="Team A" value={createForm.cricketTeamA} onChange={(value) => setCreateForm((current) => ({ ...current, cricketTeamA: value.toUpperCase(), cricketSelectedTeam: current.cricketSelectedTeam || value.toUpperCase() }))} placeholder="MI" />
-              <Field label="Team B" value={createForm.cricketTeamB} onChange={(value) => setCreateForm((current) => ({ ...current, cricketTeamB: value.toUpperCase() }))} placeholder="KKR" />
-              <Field label="League" value={createForm.cricketLeague} onChange={(value) => setCreateForm((current) => ({ ...current, cricketLeague: value }))} placeholder="IPL" />
-              <Field label="YES Team" value={createForm.cricketSelectedTeam} onChange={(value) => setCreateForm((current) => ({ ...current, cricketSelectedTeam: value.toUpperCase() }))} placeholder="MI" />
+            <div className="overflow-hidden rounded-[24px] border border-mint/15 bg-[radial-gradient(circle_at_top_left,rgba(95,242,191,0.12),transparent_34%),rgba(255,255,255,0.025)]">
+              <div className="border-b border-white/10 p-4">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-mint">Fixture Picker</p>
+                    <h3 className="mt-1 text-lg font-semibold text-white">Pick a real upcoming match</h3>
+                    <p className="mt-1 max-w-xl text-xs leading-5 text-slate-400">
+                      No manual IDs. Pick a provider fixture, choose the YES side, and the oracle rule fills itself.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {(["24h", "7d", "all"] as CricketFixtureWindow[]).map((window) => (
+                      <button
+                        key={window}
+                        type="button"
+                        onClick={() => setCricketFixtureWindow(window)}
+                        className={`rounded-full border px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] transition ${
+                          cricketFixtureWindow === window
+                            ? "border-mint/40 bg-mint/20 text-mint"
+                            : "border-white/10 bg-white/[0.03] text-slate-400 hover:border-white/20 hover:text-white"
+                        }`}
+                      >
+                      {window === "24h" ? "Next 24h" : window === "7d" ? "7 days" : "All fixtures"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4 p-4">
+                <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+                  <div className="grid gap-2">
+                    <label className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
+                      Search fixtures
+                    </label>
+                    <div className="relative">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                      <input
+                        value={cricketFixtureSearch}
+                        onChange={(event) => setCricketFixtureSearch(event.target.value)}
+                        placeholder="Team or series, e.g. England Women"
+                        className="field-control w-full py-3 pl-10 pr-4 text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCricketFixtureSearch("");
+                        setCricketFixtureWindow("24h");
+                      }}
+                      className="rounded-[14px] border border-white/10 bg-white/[0.03] px-4 py-3 text-xs font-semibold text-slate-300 transition hover:border-white/20 hover:text-white"
+                    >
+                      Reset discovery
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowCricketAdvanced((value) => !value)}
+                      className="rounded-[14px] border border-white/10 bg-white/[0.03] px-4 py-3 text-xs font-semibold text-slate-300 transition hover:border-white/20 hover:text-white"
+                    >
+                      {showCricketAdvanced ? "Hide manual override" : "Manual override"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="rounded-[16px] border border-sky-400/15 bg-sky-400/[0.06] px-4 py-3 text-xs leading-5 text-slate-300">
+                  <span className="font-semibold text-sky-200">Provider window:</span>{" "}
+                  {cricketWindowLabel}. If you only see Women&apos;s World Cup fixtures, that is the current CricAPI schedule slice for this window. Search a team/series or switch to All fixtures for wider discovery.
+                </div>
+
+                {createForm.cricketMatchId ? (
+                  <div className="rounded-[18px] border border-mint/20 bg-mint/[0.06] p-4">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                      <div>
+                        <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-mint">Selected fixture</p>
+                        <p className="mt-1 text-base font-semibold text-white">
+                          {createForm.cricketTeamA} vs {createForm.cricketTeamB}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-400">{createForm.cricketLeague}</p>
+                      </div>
+                      <div className="grid gap-2 text-xs sm:grid-cols-3 lg:min-w-[360px]">
+                        <SelectedFixtureMetric label="YES side" value={createForm.cricketSelectedTeam} tone="mint" />
+                        <SelectedFixtureMetric label="Expiry" value={durationLabel} />
+                        <SelectedFixtureMetric label="Route" value="CricAPI" />
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="rounded-[18px] border border-white/10 bg-black/15 p-3">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-slate-500">
+                      {cricketFixtureWindow === "24h" ? "Next 24h" : cricketFixtureWindow === "7d" ? "Next 7 days" : "All upcoming"}
+                    </p>
+                    <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-1 text-[10px] text-slate-400">
+                      {cricketFixtures.length} found
+                    </span>
+                  </div>
+
+                  <div className="max-h-[380px] overflow-y-auto pr-1">
+                    <div className="grid gap-2">
+                      {cricketFixturesLoading ? (
+                        <div className="rounded-[var(--r-md)] border border-white/10 bg-white/[0.03] p-4 text-sm text-slate-400">
+                          Loading upcoming fixtures from CricAPI...
+                        </div>
+                      ) : null}
+                      {cricketFixtureError ? (
+                        <div className="rounded-[var(--r-md)] border border-red-400/20 bg-red-500/10 p-4 text-sm text-red-200">
+                          {cricketFixtureError}
+                        </div>
+                      ) : null}
+                      {!cricketFixturesLoading && !cricketFixtureError && cricketFixtures.length === 0 ? (
+                        <div className="rounded-[var(--r-md)] border border-gold/20 bg-gold/10 p-4 text-sm leading-6 text-gold">
+                          No fixtures found in this window. Try 7 days, All fixtures, or search a specific team.
+                        </div>
+                      ) : null}
+                      {cricketFixtures.map((fixture) => (
+                        <CricketFixtureCard
+                          key={fixture.id}
+                          fixture={fixture}
+                          selected={createForm.cricketMatchId === fixture.id}
+                          selectedTeam={createForm.cricketSelectedTeam}
+                          onSelect={(team) => selectCricketFixture(fixture, team)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {showCricketAdvanced ? (
+                <div className="border-t border-white/10 p-4">
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <Field label="Fixture ID" value={createForm.cricketMatchId} onChange={(value) => setCreateForm((current) => ({ ...current, cricketMatchId: value }))} placeholder="CricAPI match id" />
+                    <Field label="Team A" value={createForm.cricketTeamA} onChange={(value) => setCreateForm((current) => ({ ...current, cricketTeamA: value, cricketSelectedTeam: current.cricketSelectedTeam || value }))} placeholder="England Women" />
+                    <Field label="Team B" value={createForm.cricketTeamB} onChange={(value) => setCreateForm((current) => ({ ...current, cricketTeamB: value }))} placeholder="Scotland Women" />
+                    <Field label="League" value={createForm.cricketLeague} onChange={(value) => setCreateForm((current) => ({ ...current, cricketLeague: value }))} placeholder="ICC Womens T20 World Cup 2026" />
+                    <Field label="YES Team" value={createForm.cricketSelectedTeam} onChange={(value) => setCreateForm((current) => ({ ...current, cricketSelectedTeam: value }))} placeholder="England Women" />
+                  </div>
+                </div>
+              ) : null}
             </div>
           ) : null}
 
@@ -531,134 +869,93 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
             </div>
           ) : null}
 
-          <div className="grid gap-4 md:grid-cols-[0.8fr_1.2fr]">
-            <div className="grid gap-2">
-              <label className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
-                Duration
-              </label>
-              <input
-                value={createForm.durationMinutes}
-                onChange={(event) =>
-                  setCreateForm((current) => ({ ...current, durationMinutes: event.target.value }))
-                }
-                placeholder="180"
-                className="field-control px-4 py-3 text-sm"
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <label className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
-                Quick Templates
-              </label>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setCreateForm({
-                      ...createForm,
-                      question: "",
-                      category: "cricket",
-                      cricketProvider: "cricapi",
-                      cricketMatchId: "mi_vs_kkr",
-                      cricketLeague: "IPL",
-                      cricketTeamA: "MI",
-                      cricketTeamB: "KKR",
-                      cricketSelectedTeam: "MI",
-                      durationMinutes: "180"
-                    })
-                  }
-                  className="rounded-[12px] border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-300 transition hover:border-white/20 hover:text-white"
-                >
-                  IPL Match Soon
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setCreateForm({
-                      ...createForm,
-                      question: "",
-                      category: "crypto",
-                      cryptoAsset: "ETH",
-                      cryptoTargetPrice: "5000",
-                      cryptoDirection: "price_above",
-                      durationMinutes: "10080"
-                    })
-                  }
-                  className="rounded-[12px] border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-300 transition hover:border-white/20 hover:text-white"
-                >
-                  ETH Above $5000
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setCreateForm({
-                      question: "",
-                      category: "crypto",
-                      cryptoAsset: "ETH",
-                      cryptoTargetPrice: "5000",
-                      cryptoDirection: "price_above",
-                      cricketProvider: "cricapi",
-                      cricketMatchId: "",
-                      cricketLeague: "",
-                      cricketTeamA: "",
-                      cricketTeamB: "",
-                      cricketSelectedTeam: "",
-                      electionId: "",
-                      electionCandidate: "",
-                      electionRegion: "",
-                      electionType: "winner",
-                      durationMinutes: "180"
-                    })
-                  }
-                  className="rounded-[12px] border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-300 transition hover:border-white/20 hover:text-white"
-                >
-                  Clear Form
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid gap-3 lg:grid-cols-2">
-            <div className="rounded-[var(--r-md)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] p-3.5">
-              <div className="flex items-center gap-2 text-slate-400">
-                <TimerReset className="h-4 w-4" />
-                <p className="text-[10px] uppercase tracking-[0.16em]">Duration Summary</p>
-              </div>
-              <p className="mt-3 text-sm text-white">{durationLabel}</p>
-            </div>
-            <div className="rounded-[var(--r-md)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] p-3.5">
-              <div className="flex items-center gap-2 text-slate-400">
-                <ShieldCheck className="h-4 w-4" />
-                <p className="text-[10px] uppercase tracking-[0.16em]">Settlement Route</p>
-              </div>
-              <p className="mt-3 text-sm text-white">
-                {settlementRouteLabel}
+          <div className="overflow-hidden rounded-[24px] border border-white/10 bg-[radial-gradient(circle_at_bottom_right,rgba(95,242,191,0.10),transparent_32%),rgba(255,255,255,0.025)]">
+            <div className="border-b border-white/10 p-4">
+              <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-[color:var(--accent)]">Step 3 / Timing and launch</p>
+              <h3 className="mt-1 text-lg font-semibold text-white">Set expiry and deploy</h3>
+              <p className="mt-1 text-xs leading-5 text-slate-400">
+                Expiry controls when trading closes. The resolution worker requests Chainlink settlement after the market has ended.
               </p>
             </div>
-          </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <ActionButton
-              onClick={handleApproveCreationFee}
-              disabled={!address || !addresses || busy || hasCreationApproval || !hasGasForApproval}
-              tone="mint"
-              className="justify-center py-3.5"
-            >
-              {approveConfirming
-                ? "Approving..."
-                : hasCreationApproval
-                  ? "Creation Fee Approved"
-                  : "Approve Creation Fee"}
-            </ActionButton>
+            <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.8fr)]">
+              <div className="rounded-[18px] border border-white/10 bg-black/20 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-slate-500">Duration</p>
+                    <p className="mt-1 text-sm text-slate-400">Choose a trading window in minutes.</p>
+                  </div>
+                  <div className="flex items-center gap-2 text-mint">
+                    <TimerReset className="h-4 w-4" />
+                    <span className="text-sm font-semibold">{durationLabel}</span>
+                  </div>
+                </div>
 
-            <ActionButton
-              onClick={handleCreateMarket}
-              disabled={!address || !addresses || busy || !hasCreationApproval || !hasEnoughUsdc || !hasGasForCreation || Boolean(creationBlockedReason)}
-              tone="gold"
-              className="justify-center py-3.5"
-            >
-              {createConfirming ? "Creating..." : "Create Market"}
-            </ActionButton>
+                <input
+                  value={createForm.durationMinutes}
+                  onChange={(event) =>
+                    setCreateForm((current) => ({ ...current, durationMinutes: event.target.value }))
+                  }
+                  placeholder="180"
+                  inputMode="numeric"
+                  className="field-control mt-4 w-full px-4 py-4 text-lg font-semibold"
+                />
+
+                <div className="mt-3 grid gap-2 sm:grid-cols-4">
+                  {[
+                    { label: "3h", value: "180" },
+                    { label: "6h", value: "360" },
+                    { label: "24h", value: "1440" },
+                    { label: "7d", value: "10080" }
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setCreateForm((current) => ({ ...current, durationMinutes: option.value }))}
+                      className={`rounded-[14px] border px-3 py-3 text-sm font-semibold transition ${
+                        createForm.durationMinutes === option.value
+                          ? "border-mint/40 bg-mint/20 text-mint"
+                          : "border-white/10 bg-white/[0.04] text-slate-300 hover:border-white/20 hover:text-white"
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid gap-3">
+                <LaunchMetric icon={ShieldCheck} label="Settlement route" value={settlementRouteLabel} />
+                <LaunchMetric icon={Coins} label="Creation fee" value={formatUsdc(requiredFee)} />
+                <LaunchMetric icon={WalletCards} label="Wallet balance" value={walletLoading ? "Syncing" : walletError ? "Unavailable" : formatUsdc(usdcBalance ?? 0n)} />
+              </div>
+            </div>
+
+            <div className="border-t border-white/10 p-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <ActionButton
+                  onClick={handleApproveCreationFee}
+                  disabled={!address || !addresses || busy || hasCreationApproval || !hasGasForApproval}
+                  tone="mint"
+                  className="justify-center py-3.5"
+                >
+                  {approveConfirming
+                    ? "Approving..."
+                    : hasCreationApproval
+                      ? "Creation Fee Approved"
+                      : "Approve Creation Fee"}
+                </ActionButton>
+
+                <ActionButton
+                  onClick={handleCreateMarket}
+                  disabled={!address || !addresses || busy || !oracleMetadata || !contractOracleQuery || !hasCreationApproval || !hasEnoughUsdc || !hasGasForCreation || Boolean(creationBlockedReason)}
+                  tone="gold"
+                  className="justify-center py-3.5"
+                >
+                  {createConfirming ? "Creating..." : "Create Market"}
+                </ActionButton>
+              </div>
+            </div>
           </div>
 
           {!hasGasForApproval ? (
@@ -691,89 +988,33 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
         <Panel className="p-3.5 sm:p-4">
           <p className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.08em] text-[color:var(--accent)]">
             <span className="h-1.5 w-1.5 rounded-full bg-violet-500 shadow-[0_0_8px_rgba(124,58,237,0.95)]" />
-            Preview
+            Launch Summary
           </p>
 
-          <div className="mt-3 space-y-2">
-            <div className="rounded-[var(--r-md)] border border-[color:var(--border-default)] bg-[color:var(--surface-2)] p-3">
+          <div className="mt-3 space-y-2.5">
+            <div className="rounded-[20px] border border-[color:var(--border-default)] bg-[color:var(--surface-2)] p-3.5">
               <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-[color:var(--text-tertiary)]">Question</p>
               <p className="mt-2 text-sm font-semibold text-[color:var(--text-primary)]">
                 {questionToCreate || "Your market question will appear here"}
               </p>
             </div>
 
-            <div className="grid gap-2 sm:grid-cols-2">
-              <PreviewMetric
-                icon={WalletCards}
-                label="Wallet Balance"
-                value={walletLoading ? "Syncing" : walletError ? "Unavailable" : formatUsdc(usdcBalance ?? 0n)}
-              />
-              <PreviewMetric icon={Coins} label="Creation Fee" value={formatUsdc(requiredFee)} />
-              <PreviewMetric
-                icon={WalletCards}
-                label="Amoy Gas"
-                value={walletLoading ? "Syncing" : walletError ? "Unavailable" : nativeBalanceLabel}
-              />
-              <PreviewMetric icon={Sparkles} label="Oracle Type" value={contractOracleType || "--"} />
-              <PreviewMetric icon={TimerReset} label="Expiry Window" value={durationLabel} />
+            <div className="rounded-[20px] border border-white/10 bg-white/[0.025] p-3.5">
+              <SummaryRow label="Market type" value={createForm.category === "cricket" ? "Cricket" : createForm.category === "crypto" ? "Crypto" : "Election"} />
+              <SummaryRow label="Oracle route" value={settlementRouteLabel} />
+              <SummaryRow label="Expiry" value={durationLabel} />
+              <SummaryRow label="Creation fee" value={formatUsdc(requiredFee)} />
+              <SummaryRow label="Wallet" value={walletLoading ? "Syncing" : walletError ? "Unavailable" : formatUsdc(usdcBalance ?? 0n)} />
             </div>
 
-            <div className="rounded-[var(--r-md)] border border-mint/15 bg-mint/[0.04] p-3 text-sm text-slate-300">
-              <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-mint">Oracle Metadata</p>
-              <p className="mt-2 text-sm font-semibold text-[color:var(--text-primary)]">{oracleMetadata?.settlementRule ?? "Complete the structured metadata to generate a deterministic settlement rule."}</p>
-              <p className="mt-1 text-xs text-[color:var(--text-tertiary)]">
-                Source: {oracleMetadata?.verificationSource ?? "--"}
-              </p>
-              <p className="mt-2 max-h-12 overflow-hidden break-all font-mono text-[10px] leading-4 text-[color:var(--text-tertiary)]">
-                {structuredOracleCreationEnabled
-                  ? encodedOracleQuery || "Encoded oracle query will appear here."
-                  : `Legacy-compatible query: ${contractOracleQuery || "--"}`}
-              </p>
-            </div>
-
-            <div className="grid gap-2">
-              <TrustStep
-                icon={CheckCircle2}
-                title="1. Structured rule"
-                detail={oracleMetadata?.settlementRule ?? "Complete the oracle form."}
-                active={Boolean(oracleMetadata)}
-              />
-              <TrustStep
-                icon={ShieldCheck}
-                title="2. Provider verification"
-                detail={
-                  createForm.category === "crypto"
-                    ? "CoinGecko market_chart/range is sampled after expiry."
-                    : createForm.category === "cricket"
-                      ? "CricAPI match_info is sampled after the fixture ends and the winner is normalized deterministically."
-                      : "Provider not production-enabled yet."
-                }
-                active={categoryResolutionReady}
-              />
-              <TrustStep
-                icon={LockKeyhole}
-                title="3. Chainlink settlement"
-                detail={
-                  createForm.category === "crypto"
-                    ? "Chainlink Functions returns YES/NO plus the fetched settlement price for indexing."
-                    : "Chainlink Functions returns YES/NO plus the fetched match result for indexing."
-                }
-                active={categoryResolutionReady}
-              />
-            </div>
-
-            <div className="rounded-[var(--r-md)] border border-[color:var(--border-default)] bg-[color:var(--surface-2)] p-3 text-sm text-[color:var(--text-secondary)]">
-              <div className="flex items-center justify-between">
-                <span>Fee approval</span>
-                <span className="font-semibold text-white">
-                  {hasCreationApproval ? "Ready" : "Required"}
-                </span>
+            {oracleMetadata?.settlementRule ? (
+              <div className="rounded-[20px] border border-mint/15 bg-mint/[0.04] p-3.5 text-sm text-slate-300">
+                <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-mint">Settlement Rule</p>
+                <p className="mt-2 text-sm font-semibold leading-5 text-[color:var(--text-primary)]">
+                  {oracleMetadata.settlementRule}
+                </p>
               </div>
-              <div className="mt-2 flex items-center justify-between">
-                <span>Collateral mode</span>
-                <span className="font-semibold text-white">{collateralConfig.label}</span>
-              </div>
-            </div>
+            ) : null}
           </div>
         </Panel>
 
@@ -822,6 +1063,177 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
         </Panel>
       </div>
     </section>
+    </>
+  );
+}
+
+function CricketFixtureCard({
+  fixture,
+  selected,
+  selectedTeam,
+  onSelect
+}: {
+  fixture: CricketFixture;
+  selected: boolean;
+  selectedTeam: string;
+  onSelect: (team: string) => void;
+}) {
+  const teams = fixture.teams.length >= 2 ? fixture.teams.slice(0, 2) : [fixture.teamA, fixture.teamB].filter(Boolean);
+
+  return (
+    <div
+      className={`rounded-[18px] border p-3.5 transition ${
+        selected
+          ? "border-mint/30 bg-mint/[0.06] shadow-[0_0_24px_rgba(95,242,191,0.08)]"
+          : "border-white/10 bg-white/[0.035] hover:border-white/20"
+      }`}
+    >
+      <div className="grid gap-3 lg:grid-cols-[150px_minmax(0,1fr)_auto] lg:items-center">
+        <div className="rounded-[14px] border border-white/10 bg-black/20 p-3">
+          <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 font-mono text-[9px] uppercase tracking-[0.18em] text-slate-400">
+            {fixture.matchType}
+          </span>
+          <p className="mt-3 flex items-center gap-1.5 text-xs font-semibold leading-5 text-white">
+            <CalendarClock className="h-3.5 w-3.5 text-mint" />
+            {formatFixtureStart(fixture.dateTimeGMT)}
+          </p>
+        </div>
+
+        <div className="min-w-0">
+          <p className="text-sm font-semibold leading-5 text-white">{fixture.teamA} vs {fixture.teamB}</p>
+          <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-400">{fixture.name}</p>
+          <p className="mt-1 truncate text-[11px] uppercase tracking-[0.12em] text-slate-500">
+            {fixture.venue ?? fixture.league}
+          </p>
+        </div>
+
+        <div className="grid gap-2 sm:grid-cols-2 lg:min-w-[250px]">
+          {teams.map((team) => (
+            <button
+              key={`${fixture.id}-${team}`}
+              type="button"
+              onClick={() => onSelect(team)}
+              className={`rounded-[14px] border px-3 py-3 text-xs font-semibold leading-4 transition ${
+                selected && selectedTeam === team
+                  ? "border-mint/40 bg-mint/20 text-mint"
+                  : "border-white/10 bg-white/[0.04] text-slate-300 hover:border-white/20 hover:text-white"
+              }`}
+            >
+              <span className="block font-mono text-[9px] uppercase tracking-[0.16em] opacity-70">YES</span>
+              {team}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SelectedFixtureMetric({
+  label,
+  value,
+  tone = "default"
+}: {
+  label: string;
+  value: string;
+  tone?: "default" | "mint";
+}) {
+  return (
+    <div className="rounded-[14px] border border-white/10 bg-black/20 p-3">
+      <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
+      <p className={`mt-1 truncate text-sm font-semibold ${tone === "mint" ? "text-mint" : "text-white"}`}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function CryptoAssetOption({
+  active,
+  symbol,
+  name,
+  hint,
+  onClick
+}: {
+  active: boolean;
+  symbol: string;
+  name: string;
+  hint: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-[18px] border p-4 text-left transition ${
+        active
+          ? "border-violet-300/40 bg-violet-400/15 text-white shadow-[0_0_24px_rgba(124,58,237,0.12)]"
+          : "border-white/10 bg-white/[0.035] text-slate-300 hover:border-white/20 hover:text-white"
+      }`}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-xl font-semibold">{symbol}</span>
+        <span className={`h-2.5 w-2.5 rounded-full ${active ? "bg-mint shadow-[0_0_12px_rgba(95,242,191,0.9)]" : "bg-white/20"}`} />
+      </div>
+      <p className="mt-2 text-sm font-semibold">{name}</p>
+      <p className="mt-1 text-xs leading-5 text-slate-500">{hint}</p>
+    </button>
+  );
+}
+
+function DirectionChoice({
+  active,
+  label,
+  detail,
+  onClick
+}: {
+  active: boolean;
+  label: string;
+  detail: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-[16px] border p-4 text-left transition ${
+        active
+          ? "border-mint/40 bg-mint/15 text-mint"
+          : "border-white/10 bg-white/[0.035] text-slate-300 hover:border-white/20 hover:text-white"
+      }`}
+    >
+      <p className="text-base font-semibold">{label}</p>
+      <p className="mt-1 text-xs leading-5 text-slate-500">{detail}</p>
+    </button>
+  );
+}
+
+function LaunchMetric({
+  icon: Icon,
+  label,
+  value
+}: {
+  icon: typeof ShieldCheck;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-[18px] border border-white/10 bg-black/20 p-4">
+      <div className="flex items-center gap-2 text-slate-500">
+        <Icon className="h-4 w-4" />
+        <p className="font-mono text-[10px] uppercase tracking-[0.16em]">{label}</p>
+      </div>
+      <p className="mt-2 text-sm font-semibold leading-5 text-white">{value}</p>
+    </div>
+  );
+}
+
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-start justify-between gap-4 border-b border-white/10 py-2.5 last:border-b-0">
+      <span className="text-xs text-slate-500">{label}</span>
+      <span className="max-w-[190px] text-right text-sm font-semibold leading-5 text-white">{value}</span>
+    </div>
   );
 }
 
@@ -855,12 +1267,14 @@ function CategoryButton({
   active,
   title,
   subtitle,
+  description,
   ready = false,
   onClick
 }: {
   active: boolean;
   title: string;
   subtitle: string;
+  description?: string;
   ready?: boolean;
   onClick: () => void;
 }) {
@@ -868,46 +1282,29 @@ function CategoryButton({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-[var(--r-lg)] border px-4 py-3.5 text-left transition ${
+      className={`group relative overflow-hidden rounded-[24px] border p-5 text-left transition ${
         active
-          ? "border-mint/30 bg-[linear-gradient(135deg,rgba(95,242,191,0.16),rgba(95,242,191,0.05))] text-white shadow-[0_0_28px_rgba(95,242,191,0.08)]"
+          ? "border-mint/40 bg-[linear-gradient(135deg,rgba(95,242,191,0.18),rgba(124,58,237,0.08))] text-white shadow-[0_0_34px_rgba(95,242,191,0.10)]"
           : "border-white/10 bg-white/[0.03] text-slate-300 hover:border-white/20 hover:text-white"
       }`}
     >
-      <div className="flex items-center justify-between gap-3">
-        <p className="font-heading text-base font-semibold uppercase">{title}</p>
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent opacity-0 transition group-hover:opacity-100" />
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="font-heading text-lg font-semibold uppercase">{title}</p>
+          <p className="mt-2 text-[11px] uppercase tracking-[0.16em] text-slate-500">{subtitle}</p>
+        </div>
         <span className={`rounded-full px-2 py-1 text-[9px] uppercase tracking-[0.2em] ${
           ready ? "bg-mint/15 text-mint" : "bg-gold/10 text-gold"
         }`}>
           {ready ? "Live" : "Soon"}
         </span>
       </div>
-      <p className="mt-2 text-[11px] uppercase tracking-[0.16em] text-slate-500">{subtitle}</p>
+      {description ? (
+        <p className="mt-4 min-h-[44px] text-sm leading-6 text-slate-400">{description}</p>
+      ) : null}
+      <div className={`mt-5 h-1.5 rounded-full ${active ? "bg-mint" : "bg-white/10"}`} />
     </button>
-  );
-}
-
-function TrustStep({
-  icon: Icon,
-  title,
-  detail,
-  active
-}: {
-  icon: typeof CheckCircle2;
-  title: string;
-  detail: string;
-  active: boolean;
-}) {
-  return (
-    <div className={`rounded-[var(--r-md)] border px-3 py-2.5 ${
-      active ? "border-mint/15 bg-mint/[0.04]" : "border-[color:var(--border-subtle)] bg-[color:var(--surface-2)]"
-    }`}>
-      <div className="flex items-center gap-2">
-        <Icon className={`h-3.5 w-3.5 ${active ? "text-mint" : "text-slate-500"}`} />
-        <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-[color:var(--text-secondary)]">{title}</p>
-      </div>
-      <p className="mt-1.5 text-xs leading-5 text-[color:var(--text-secondary)]">{detail}</p>
-    </div>
   );
 }
 
@@ -926,6 +1323,33 @@ function buildLegacyOracleQuery(metadata: OracleMetadata) {
 function shouldRegenerateQuestion(question: string) {
   const trimmed = question.trim();
   return !trimmed || /^Will (ETH|BTC|SOL|USDC) be (above|below) \$/i.test(trimmed);
+}
+
+function shouldRegenerateCricketQuestion(question: string) {
+  const trimmed = question.trim();
+  return !trimmed || /^Will .+ beat .+\?$/i.test(trimmed);
+}
+
+function suggestDurationMinutes(dateTimeGMT: string) {
+  const startMs = Date.parse(`${dateTimeGMT}Z`);
+  if (!Number.isFinite(startMs)) return "300";
+
+  const minutesUntilStart = Math.ceil((startMs - Date.now()) / 60_000);
+  return String(Math.max(minutesUntilStart + 240, 60));
+}
+
+function formatFixtureStart(dateTimeGMT: string) {
+  const startMs = Date.parse(`${dateTimeGMT}Z`);
+  if (!Number.isFinite(startMs)) return "Start time pending";
+
+  return `${new Date(startMs).toLocaleString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true
+  })} IST`;
 }
 
 function formatPol(value: bigint) {
