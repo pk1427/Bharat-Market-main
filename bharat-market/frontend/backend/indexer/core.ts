@@ -792,6 +792,7 @@ async function syncMarketEvents(
     const market = await prisma.market.findUniqueOrThrow({
       where: { id: marketId }
     });
+    let currentOutcome = market.outcome;
 
     type IndexedLog = { kind: "buy" | "add" | "remove" | "redeem" | "resolve"; log: any };
 
@@ -1092,6 +1093,52 @@ async function syncMarketEvents(
           continue;
         }
 
+        const existingRedemption = await prisma.redemption.findUnique({
+          where: { eventKey: snapshotKey }
+        });
+        const winningSide =
+          currentOutcome === "YES" || currentOutcome === "NO"
+            ? currentOutcome
+            : Number(
+                await publicClient.readContract({
+                  address: marketAddress,
+                  abi: marketAbi,
+                  functionName: "winningOutcome",
+                  args: []
+                })
+              ) === 1
+              ? "YES"
+              : "NO";
+
+        if (!existingRedemption) {
+          const redeemedPosition = await prisma.walletPosition.findUnique({
+            where: {
+              wallet_marketId_side: {
+                wallet: redeemer.toLowerCase(),
+                marketId,
+                side: winningSide
+              }
+            }
+          });
+
+          if (redeemedPosition) {
+            await prisma.walletPosition.update({
+              where: {
+                wallet_marketId_side: {
+                  wallet: redeemer.toLowerCase(),
+                  marketId,
+                  side: winningSide
+                }
+              },
+              data: {
+                shares: redeemedPosition.shares > payout ? redeemedPosition.shares - payout : 0n,
+                redeemedAmount: { increment: payout },
+                lastTradeAt: timestamp
+              }
+            });
+          }
+        }
+
         await prisma.redemption.upsert({
           where: { eventKey: snapshotKey },
           update: {},
@@ -1143,6 +1190,7 @@ async function syncMarketEvents(
             lastActivityAt: timestamp
           }
         });
+        currentOutcome = Number(outcome) === 1 ? "YES" : Number(outcome) === 2 ? "NO" : "PENDING";
 
         await queueWebhookEvent({
           prisma,

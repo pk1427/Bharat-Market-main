@@ -159,7 +159,7 @@ export async function getIndexedMarketDetail(
 
   if (account) {
     const wallet = account.toLowerCase();
-    const [yesPosition, noPosition, lpPosition] = await Promise.all([
+    const [yesPosition, noPosition, lpPosition, redeemedAggregate] = await Promise.all([
       prisma.walletPosition.findUnique({
         where: {
           wallet_marketId_side: {
@@ -185,11 +185,29 @@ export async function getIndexedMarketDetail(
             marketId: market.id
           }
         }
+      }),
+      prisma.redemption.aggregate({
+        where: {
+          marketId: market.id,
+          redeemer: wallet
+        },
+        _sum: {
+          payoutAmount: true
+        }
       })
     ]);
 
-    yesBalance = yesPosition?.shares ?? 0n;
-    noBalance = noPosition?.shares ?? 0n;
+    const redeemedPayout = redeemedAggregate._sum.payoutAmount ?? 0n;
+    yesBalance = reconcileRedeemedShares(
+      yesPosition?.shares ?? 0n,
+      market.outcome === "YES" ? redeemedPayout : 0n,
+      yesPosition?.redeemedAmount ?? 0n
+    );
+    noBalance = reconcileRedeemedShares(
+      noPosition?.shares ?? 0n,
+      market.outcome === "NO" ? redeemedPayout : 0n,
+      noPosition?.redeemedAmount ?? 0n
+    );
     lpBalance = lpPosition?.lpTokens ?? 0n;
 
     const addresses = getRequiredAddresses();
@@ -243,6 +261,11 @@ export async function getIndexedMarketDetail(
     }),
     pendingRequest
   };
+}
+
+function reconcileRedeemedShares(shares: bigint, totalRedeemed: bigint, indexedRedeemed: bigint) {
+  const unindexedRedeemed = totalRedeemed > indexedRedeemed ? totalRedeemed - indexedRedeemed : 0n;
+  return shares > unindexedRedeemed ? shares - unindexedRedeemed : 0n;
 }
 
 export async function listTopMovers(limit = 10) {

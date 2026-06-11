@@ -55,6 +55,13 @@ export async function getIndexedPortfolio(account: `0x${string}`) {
 
   const groupsByMarket = new Map<string, PortfolioGroup>();
   const redeemedMarketIds = new Set(redemptions.map((entry: (typeof redemptions)[number]) => entry.marketId));
+  const redeemedByMarket = new Map<string, bigint>();
+  for (const redemption of redemptions) {
+    redeemedByMarket.set(
+      redemption.marketId,
+      (redeemedByMarket.get(redemption.marketId) ?? 0n) + BigInt(redemption.payoutAmount)
+    );
+  }
   const overview: PortfolioOverview = {
     walletUsdcBalance: await readWalletUsdcBalance(account),
     yesHoldings: 0n,
@@ -71,9 +78,23 @@ export async function getIndexedPortfolio(account: `0x${string}`) {
     const status = getMarketStatus(market.resolved, market.endTime);
     const statusLabel = getStatusLabel(status);
     const category = getCategoryLabel(market.oracleType, market.oracleQuery);
-    const probability =
-      position.side === "YES" ? BigInt(market.latestYesProbability) : BigInt(market.latestNoProbability);
-    const shares = BigInt(position.shares);
+    const probability = market.resolved
+      ? (position.side === "YES" && market.outcome === "YES") || (position.side === "NO" && market.outcome === "NO")
+        ? 1_000_000_000_000_000_000n
+        : 0n
+      : position.side === "YES"
+        ? BigInt(market.latestYesProbability)
+        : BigInt(market.latestNoProbability);
+    const positionShares = BigInt(position.shares);
+    const redeemedForPosition =
+      market.resolved &&
+      ((position.side === "YES" && market.outcome === "YES") || (position.side === "NO" && market.outcome === "NO"))
+        ? redeemedByMarket.get(market.id) ?? 0n
+        : 0n;
+    const indexedRedeemed = BigInt(position.redeemedAmount);
+    const unindexedRedeemed =
+      redeemedForPosition > indexedRedeemed ? redeemedForPosition - indexedRedeemed : 0n;
+    const shares = positionShares > unindexedRedeemed ? positionShares - unindexedRedeemed : 0n;
     const collateralIn = BigInt(position.collateralIn);
     const estimatedValue = (shares * probability) / 1_000_000_000_000_000_000n;
     const avgEntry =

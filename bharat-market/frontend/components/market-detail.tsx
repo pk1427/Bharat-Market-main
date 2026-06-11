@@ -391,7 +391,12 @@ export function MarketDetail({ address }: { address: string }) {
                       : "Awaiting fulfillment"}
                 </p>
                 <p className="mt-2 text-xs text-slate-400">
-                  Observed {formatSettlementObservedAt(market.oracleMetadata.settlementObservedAt)}
+                  Observed{" "}
+                  {market.oracleMetadata.settlementObservedAt
+                    ? formatSettlementObservedAt(market.oracleMetadata.settlementObservedAt)
+                    : market.resolved
+                      ? "on-chain resolution indexed"
+                      : "Awaiting fulfillment"}
                 </p>
               </div>
 
@@ -405,7 +410,10 @@ export function MarketDetail({ address }: { address: string }) {
               <div className="mt-4 rounded-2xl bg-slate-950/30 p-4">
                 <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">Settlement Summary</p>
                 <p className="mt-3 text-sm leading-6 text-slate-300">
-                  {market.oracleMetadata.settlementSummary ?? "No Chainlink fulfillment has been indexed yet. Once fulfilled, BharatMarket will show the fetched CoinGecko price, outcome, and redemption state here."}
+                  {market.oracleMetadata.settlementSummary ??
+                    (market.resolved
+                      ? `On-chain settlement is finalized as ${market.winningLabel}. Provider payload metadata can still backfill the fetched source value as the indexer catches up.`
+                      : "No Chainlink fulfillment has been indexed yet. Once fulfilled, BharatMarket will show the fetched provider value, outcome, and redemption state here.")}
                 </p>
               </div>
             </div>
