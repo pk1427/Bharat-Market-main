@@ -10,6 +10,7 @@ import {
   Copy,
   FolderClock,
   LogOut,
+  LayoutGrid,
   PlusSquare,
   ShieldCheck,
   Shield,
@@ -30,7 +31,8 @@ import { cn } from "@/lib/utils";
 const navItems = [
   { href: "/", label: "Markets", icon: CandlestickChart },
   { href: "/history", label: "History", icon: FolderClock },
-  { href: "/create-market", label: "Create", icon: PlusSquare }
+  { href: "/create-market", label: "Create", icon: PlusSquare },
+  { href: "/embed", label: "Embeds", icon: LayoutGrid }
 ];
 
 export function WalletBar() {

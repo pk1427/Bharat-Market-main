@@ -1,8 +1,17 @@
 import Link from "next/link";
 
+import { listTrendingMarkets } from "@/backend/services/markets";
 import { Panel } from "@/components/ui/panel";
 
-export default function EmbedLandingPage() {
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
+export default async function EmbedLandingPage() {
+  const latestMarkets = await listTrendingMarkets(1);
+  const latestMarketAddress =
+    latestMarkets?.[0]?.address ?? process.env.NEXT_PUBLIC_DEFAULT_MARKET_ADDRESS ?? ZERO_ADDRESS;
+  const marketHref =
+    latestMarketAddress.toLowerCase() === ZERO_ADDRESS ? "/embed/board" : `/embed/market/${latestMarketAddress}`;
+
   return (
     <main className="pb-12">
       <Panel className="rounded-[32px] border border-white/8 bg-[linear-gradient(180deg,rgba(10,14,24,0.98),rgba(16,18,28,0.96))] p-8">
@@ -25,12 +34,14 @@ export default function EmbedLandingPage() {
             <p className="mt-2 text-sm text-slate-400">A compact live board for iframes or partner surfaces.</p>
           </Link>
           <Link
-            href="/embed/market/0x0000000000000000000000000000000000000000"
+            href={marketHref}
             className="rounded-[22px] border border-white/10 bg-white/[0.03] p-5 transition hover:border-violet-400/30 hover:bg-white/[0.05]"
           >
             <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Market Widget</p>
             <p className="mt-3 text-xl font-semibold text-white">Single market card</p>
-            <p className="mt-2 text-sm text-slate-400">Embed any market using its on-chain address.</p>
+            <p className="mt-2 text-sm text-slate-400">
+              Open the latest indexed market, or pass any on-chain address directly.
+            </p>
           </Link>
         </div>
       </Panel>
