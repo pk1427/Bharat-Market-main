@@ -93,6 +93,12 @@ export function MarketDetail({ address }: { address: string }) {
   }, [market]);
 
   useEffect(() => {
+    setRedeemHash(undefined);
+    setRedeemError(null);
+    setRedeemToastId(null);
+  }, [address, account]);
+
+  useEffect(() => {
     if (redeemReceipt?.status === "success") {
       if (!redeemHash || !market) {
         void detail.refresh(true);
@@ -191,6 +197,8 @@ export function MarketDetail({ address }: { address: string }) {
   const redeemBusy = redeemPending || redeemConfirming;
   const redeemableBalance =
     market.winningOutcome === 1 ? market.yesBalance : market.winningOutcome === 2 ? market.noBalance : 0n;
+  const redeemSucceeded = redeemReceipt?.status === "success";
+  const displayedRedeemableBalance = redeemSucceeded ? 0n : redeemableBalance;
   const yesPercent = formatProbabilityNumber(market.yesProbability);
   const volatility = Math.abs(yesPercent - 50).toFixed(1);
   const momentum = yesPercent >= 50 ? "YES momentum" : "NO momentum";
@@ -484,7 +492,7 @@ export function MarketDetail({ address }: { address: string }) {
                 </div>
                 <div className="mt-2 flex items-center justify-between">
                   <span>Redeemable balance</span>
-                  <span className="font-semibold text-white">{formatShares(redeemableBalance)}</span>
+                  <span className="font-semibold text-white">{formatShares(displayedRedeemableBalance)}</span>
                 </div>
               </div>
 
@@ -494,15 +502,15 @@ export function MarketDetail({ address }: { address: string }) {
                   state={
                     redeemBusy
                       ? "pending"
-                      : redeemReceipt?.status === "success"
+                      : redeemSucceeded
                         ? "success"
                         : "error"
                   }
-                  title="Redeem winnings"
+                  title={redeemSucceeded ? "Redeemed" : "Redeem winnings"}
                   detail={
                     redeemBusy
                       ? "Waiting for the redemption transaction to finalize on Polygon Amoy."
-                      : redeemReceipt?.status === "success"
+                      : redeemSucceeded
                         ? "Winning collateral has been redeemed successfully."
                         : "Redemption reverted on-chain."
                   }
@@ -512,10 +520,10 @@ export function MarketDetail({ address }: { address: string }) {
               <button
                 type="button"
                 onClick={handleRedeem}
-                disabled={!market.resolved || redeemableBalance <= 0n || redeemBusy}
+                disabled={!market.resolved || displayedRedeemableBalance <= 0n || redeemBusy || redeemSucceeded}
                 className="w-full rounded-2xl border border-gold/30 bg-gold/15 px-4 py-3 font-semibold text-gold transition disabled:cursor-not-allowed disabled:opacity-40"
               >
-                {redeemBusy ? "Redeeming..." : "Redeem Winnings"}
+                {redeemBusy ? "Redeeming..." : redeemSucceeded ? "Redeemed" : "Redeem Winnings"}
               </button>
             </div>
           </Panel>
