@@ -19,7 +19,11 @@ type CricApiMatch = {
 type CricApiMatchesResponse = {
   status?: string;
   data?: CricApiMatch[];
+  reason?: string;
 };
+
+const FIXTURE_CACHE_MS = 60_000;
+const fixturePageCache = new Map<string, { expiresAt: number; data: CricApiMatch[] }>();
 
 export async function GET(request: NextRequest) {
   const apiKey = process.env.CRICAPI_KEY;
@@ -32,7 +36,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const offsets = search ? [0, 25] : [0, 25, 50, 75];
+    const offsets = search ? [0] : window === "all" ? [0, 25] : [0];
     const pages = await Promise.all(offsets.map((offset) => fetchFixturePage({ apiKey, search, offset })));
     const fixtures = uniqueFixtures(pages.flat());
     const upcomingFixtures = fixtures
@@ -77,6 +81,12 @@ async function fetchFixturePage({
   search: string;
   offset: number;
 }) {
+  const cacheKey = `${search.toLowerCase()}::${offset}`;
+  const cached = fixturePageCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.data;
+  }
+
   const url = new URL("https://api.cricapi.com/v1/matches");
   url.searchParams.set("apikey", apiKey);
   url.searchParams.set("offset", String(offset));
@@ -90,7 +100,17 @@ async function fetchFixturePage({
   }
 
   const payload = (await response.json()) as CricApiMatchesResponse;
-  return Array.isArray(payload.data) ? payload.data : [];
+  if (payload.status && payload.status !== "success") {
+    throw new Error(payload.reason || "CricAPI fixtures request failed.");
+  }
+
+  const data = Array.isArray(payload.data) ? payload.data : [];
+  fixturePageCache.set(cacheKey, {
+    expiresAt: Date.now() + FIXTURE_CACHE_MS,
+    data
+  });
+
+  return data;
 }
 
 function isUpcomingFixture(match: CricApiMatch) {

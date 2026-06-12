@@ -51,6 +51,8 @@ const defaultCreateForm = {
   cricketTeamA: "",
   cricketTeamB: "",
   cricketSelectedTeam: "",
+  cricketMatchType: "",
+  cricketStartTimeGMT: "",
   electionId: "",
   electionCandidate: "",
   electionRegion: "",
@@ -252,8 +254,21 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
           throw new Error(payload.error ?? "Unable to load upcoming cricket fixtures.");
         }
 
+        const fixtures = Array.isArray(payload.data) ? payload.data : [];
+        if (!cancelled && !cricketFixtureSearch.trim() && fixtures.length === 0) {
+          if (cricketFixtureWindow === "24h") {
+            setCricketFixtureWindow("7d");
+            return;
+          }
+
+          if (cricketFixtureWindow === "7d") {
+            setCricketFixtureWindow("all");
+            return;
+          }
+        }
+
         if (!cancelled) {
-          setCricketFixtures(Array.isArray(payload.data) ? payload.data : []);
+          setCricketFixtures(fixtures);
           setCricketFixturesLoading(false);
         }
       } catch (err) {
@@ -283,7 +298,9 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
       cricketTeamA: fixture.teamA,
       cricketTeamB: fixture.teamB,
       cricketSelectedTeam: selectedTeam,
-      durationMinutes: suggestDurationMinutes(fixture.dateTimeGMT)
+      cricketMatchType: fixture.matchType,
+      cricketStartTimeGMT: fixture.dateTimeGMT,
+      durationMinutes: suggestCricketDurationMinutes(fixture.dateTimeGMT, fixture.matchType)
     }));
   }
 
@@ -482,6 +499,11 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
     if (minutes >= 60) return `${Math.round(minutes / 60)} hour window`;
     return `${minutes} minute window`;
   }, [createForm.durationMinutes]);
+  const cricketAutoExpiryLabel = useMemo(() => {
+    if (!createForm.cricketStartTimeGMT) return "Select fixture";
+    return formatCricketAutoExpiry(createForm.cricketStartTimeGMT, createForm.cricketMatchType);
+  }, [createForm.cricketMatchType, createForm.cricketStartTimeGMT]);
+  const launchExpiryLabel = createForm.category === "cricket" ? cricketAutoExpiryLabel : durationLabel;
 
   return (
     <>
@@ -721,7 +743,7 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
                     <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-mint">Fixture Picker</p>
                     <h3 className="mt-1 text-lg font-semibold text-white">Pick a real upcoming match</h3>
                     <p className="mt-1 max-w-xl text-xs leading-5 text-slate-400">
-                      No manual IDs. Pick a provider fixture, choose the YES side, and the oracle rule fills itself.
+                      No manual IDs. Pick a provider fixture, choose the YES side, and BharatMarket auto-fills teams, match id, and market close timing.
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -783,7 +805,7 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
 
                 <div className="rounded-[16px] border border-sky-400/15 bg-sky-400/[0.06] px-4 py-3 text-xs leading-5 text-slate-300">
                   <span className="font-semibold text-sky-200">Provider window:</span>{" "}
-                  {cricketWindowLabel}. If you only see Women&apos;s World Cup fixtures, that is the current CricAPI schedule slice for this window. Search a team/series or switch to All fixtures for wider discovery.
+                  {cricketWindowLabel}. Empty windows widen automatically from 24 hours to 7 days, then to all scanned upcoming fixtures. Search a team/series to narrow discovery.
                 </div>
 
                 {createForm.cricketMatchId ? (
@@ -798,7 +820,7 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
                       </div>
                       <div className="grid gap-2 text-xs sm:grid-cols-3 lg:min-w-[360px]">
                         <SelectedFixtureMetric label="YES side" value={createForm.cricketSelectedTeam} tone="mint" />
-                        <SelectedFixtureMetric label="Expiry" value={durationLabel} />
+                        <SelectedFixtureMetric label="Auto close" value={cricketAutoExpiryLabel} />
                         <SelectedFixtureMetric label="Route" value="CricAPI" />
                       </div>
                     </div>
@@ -829,7 +851,7 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
                       ) : null}
                       {!cricketFixturesLoading && !cricketFixtureError && cricketFixtures.length === 0 ? (
                         <div className="rounded-[var(--r-md)] border border-gold/20 bg-gold/10 p-4 text-sm leading-6 text-gold">
-                          No fixtures found in this window. Try 7 days, All fixtures, or search a specific team.
+                          No fixtures found in the scanned provider data. Try searching a specific team or series name.
                         </div>
                       ) : null}
                       {cricketFixtures.map((fixture) => (
@@ -872,57 +894,83 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
           <div className="overflow-hidden rounded-[24px] border border-white/10 bg-[radial-gradient(circle_at_bottom_right,rgba(95,242,191,0.10),transparent_32%),rgba(255,255,255,0.025)]">
             <div className="border-b border-white/10 p-4">
               <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-[color:var(--accent)]">Step 3 / Timing and launch</p>
-              <h3 className="mt-1 text-lg font-semibold text-white">Set expiry and deploy</h3>
+              <h3 className="mt-1 text-lg font-semibold text-white">
+                {createForm.category === "cricket" ? "Confirm fixture timing and deploy" : "Set expiry and deploy"}
+              </h3>
               <p className="mt-1 text-xs leading-5 text-slate-400">
-                Expiry controls when trading closes. The resolution worker requests Chainlink settlement after the market has ended.
+                {createForm.category === "cricket"
+                  ? "Cricket markets use provider fixture timing. BharatMarket estimates market close from match type, then requests Chainlink settlement after the fixture result is available."
+                  : "Expiry controls when trading closes. The resolution worker requests Chainlink settlement after the market has ended."}
               </p>
             </div>
 
             <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.8fr)]">
-              <div className="rounded-[18px] border border-white/10 bg-black/20 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-slate-500">Duration</p>
-                    <p className="mt-1 text-sm text-slate-400">Choose a trading window in minutes.</p>
+              {createForm.category === "cricket" ? (
+                <div className="rounded-[18px] border border-mint/15 bg-mint/[0.05] p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-mint">Fixture-based close</p>
+                      <p className="mt-1 text-sm text-slate-300">No manual duration needed for cricket markets.</p>
+                    </div>
+                    <div className="flex items-center gap-2 text-mint">
+                      <CalendarClock className="h-4 w-4" />
+                      <span className="text-sm font-semibold">{cricketAutoExpiryLabel}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 text-mint">
-                    <TimerReset className="h-4 w-4" />
-                    <span className="text-sm font-semibold">{durationLabel}</span>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <LaunchMetric icon={TimerReset} label="Trading window" value={createForm.cricketStartTimeGMT ? "Auto from fixture" : "Select fixture"} />
+                    <LaunchMetric icon={CalendarClock} label="Fixture start" value={createForm.cricketStartTimeGMT ? formatFixtureStart(createForm.cricketStartTimeGMT) : "Waiting for fixture"} />
+                  </div>
+                  <p className="mt-4 text-xs leading-5 text-slate-400">
+                    The contract still receives an on-chain expiry timestamp, but creators do not need to choose it manually. BharatMarket estimates close from the official fixture start and match format.
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-[18px] border border-white/10 bg-black/20 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-slate-500">Duration</p>
+                      <p className="mt-1 text-sm text-slate-400">Choose a trading window in minutes.</p>
+                    </div>
+                    <div className="flex items-center gap-2 text-mint">
+                      <TimerReset className="h-4 w-4" />
+                      <span className="text-sm font-semibold">{durationLabel}</span>
+                    </div>
+                  </div>
+
+                  <input
+                    value={createForm.durationMinutes}
+                    onChange={(event) =>
+                      setCreateForm((current) => ({ ...current, durationMinutes: event.target.value }))
+                    }
+                    placeholder="180"
+                    inputMode="numeric"
+                    className="field-control mt-4 w-full px-4 py-4 text-lg font-semibold"
+                  />
+
+                  <div className="mt-3 grid gap-2 sm:grid-cols-4">
+                    {[
+                      { label: "3h", value: "180" },
+                      { label: "6h", value: "360" },
+                      { label: "24h", value: "1440" },
+                      { label: "7d", value: "10080" }
+                    ].map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setCreateForm((current) => ({ ...current, durationMinutes: option.value }))}
+                        className={`rounded-[14px] border px-3 py-3 text-sm font-semibold transition ${
+                          createForm.durationMinutes === option.value
+                            ? "border-mint/40 bg-mint/20 text-mint"
+                            : "border-white/10 bg-white/[0.04] text-slate-300 hover:border-white/20 hover:text-white"
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
-
-                <input
-                  value={createForm.durationMinutes}
-                  onChange={(event) =>
-                    setCreateForm((current) => ({ ...current, durationMinutes: event.target.value }))
-                  }
-                  placeholder="180"
-                  inputMode="numeric"
-                  className="field-control mt-4 w-full px-4 py-4 text-lg font-semibold"
-                />
-
-                <div className="mt-3 grid gap-2 sm:grid-cols-4">
-                  {[
-                    { label: "3h", value: "180" },
-                    { label: "6h", value: "360" },
-                    { label: "24h", value: "1440" },
-                    { label: "7d", value: "10080" }
-                  ].map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => setCreateForm((current) => ({ ...current, durationMinutes: option.value }))}
-                      className={`rounded-[14px] border px-3 py-3 text-sm font-semibold transition ${
-                        createForm.durationMinutes === option.value
-                          ? "border-mint/40 bg-mint/20 text-mint"
-                          : "border-white/10 bg-white/[0.04] text-slate-300 hover:border-white/20 hover:text-white"
-                      }`}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              )}
 
               <div className="grid gap-3">
                 <LaunchMetric icon={ShieldCheck} label="Settlement route" value={settlementRouteLabel} />
@@ -1002,7 +1050,7 @@ export function ActionHub({ onMarketCreated }: { onMarketCreated?: () => void })
             <div className="rounded-[20px] border border-white/10 bg-white/[0.025] p-3.5">
               <SummaryRow label="Market type" value={createForm.category === "cricket" ? "Cricket" : createForm.category === "crypto" ? "Crypto" : "Election"} />
               <SummaryRow label="Oracle route" value={settlementRouteLabel} />
-              <SummaryRow label="Expiry" value={durationLabel} />
+              <SummaryRow label="Expiry" value={launchExpiryLabel} />
               <SummaryRow label="Creation fee" value={formatUsdc(requiredFee)} />
               <SummaryRow label="Wallet" value={walletLoading ? "Syncing" : walletError ? "Unavailable" : formatUsdc(usdcBalance ?? 0n)} />
             </div>
@@ -1330,12 +1378,45 @@ function shouldRegenerateCricketQuestion(question: string) {
   return !trimmed || /^Will .+ beat .+\?$/i.test(trimmed);
 }
 
-function suggestDurationMinutes(dateTimeGMT: string) {
+function suggestCricketDurationMinutes(dateTimeGMT: string, matchType = "") {
   const startMs = Date.parse(`${dateTimeGMT}Z`);
   if (!Number.isFinite(startMs)) return "300";
 
-  const minutesUntilStart = Math.ceil((startMs - Date.now()) / 60_000);
-  return String(Math.max(minutesUntilStart + 240, 60));
+  const closeMs = estimateCricketCloseMs(dateTimeGMT, matchType);
+  if (!Number.isFinite(closeMs)) return "300";
+
+  const minutesUntilClose = Math.ceil((closeMs - Date.now()) / 60_000);
+  return String(Math.max(minutesUntilClose, 60));
+}
+
+function estimateCricketCloseMs(dateTimeGMT: string, matchType = "") {
+  const startMs = Date.parse(`${dateTimeGMT}Z`);
+  if (!Number.isFinite(startMs)) return Number.NaN;
+
+  const normalized = matchType.toLowerCase();
+  const bufferHours = normalized.includes("test")
+    ? 5 * 24
+    : normalized.includes("odi")
+      ? 9
+      : normalized.includes("t20")
+        ? 4
+        : 5;
+
+  return startMs + bufferHours * 60 * 60 * 1000;
+}
+
+function formatCricketAutoExpiry(dateTimeGMT: string, matchType = "") {
+  const closeMs = estimateCricketCloseMs(dateTimeGMT, matchType);
+  if (!Number.isFinite(closeMs)) return "Auto after fixture";
+
+  return `${new Date(closeMs).toLocaleString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true
+  })} IST`;
 }
 
 function formatFixtureStart(dateTimeGMT: string) {
