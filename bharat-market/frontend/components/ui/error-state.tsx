@@ -8,7 +8,7 @@ export function ErrorState({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="glass rounded-[28px] border border-coral/20 bg-coral/10 p-6 text-sm text-coral">
+    <div className="glass rounded-[28px] border border-coral/20 bg-coral/10 p-5 text-sm text-coral sm:p-6">
       <p>{message}</p>
       {action ? <div className="mt-4">{action}</div> : null}
     </div>

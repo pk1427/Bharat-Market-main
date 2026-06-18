@@ -157,17 +157,17 @@ export function MarketsPageClient() {
             title="Markets"
             description="Filter the board by status, category, question, or oracle route."
             action={
-              <div className="flex items-center gap-3">
+              <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end sm:gap-3">
                 <Link
                   href="/history"
-                  className="inline-flex items-center gap-2 rounded-[var(--r-md)] border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-300 transition hover:border-white/20 hover:text-white"
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-[var(--r-md)] border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-300 transition hover:border-white/20 hover:text-white sm:flex-none"
                 >
                   <FolderClock className="h-4 w-4" />
                   Archive
                 </Link>
                 <Link
                   href="/create-market"
-                  className="inline-flex items-center gap-2 rounded-[var(--r-md)] border border-mint/30 bg-mint/10 px-4 py-3 text-sm font-semibold text-mint transition hover:border-mint/50"
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-[var(--r-md)] border border-mint/30 bg-mint/10 px-4 py-3 text-sm font-semibold text-mint transition hover:border-mint/50 sm:flex-none"
                 >
                   <PlusSquare className="h-4 w-4" />
                   Create
@@ -175,7 +175,7 @@ export function MarketsPageClient() {
                 <button
                   type="button"
                   onClick={refresh}
-                  className="inline-flex items-center gap-2 rounded-[var(--r-md)] border border-violet-500/30 bg-violet-500/10 px-4 py-3 text-sm text-violet-200 transition hover:border-violet-400/40 hover:bg-violet-500/15"
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-[var(--r-md)] border border-violet-500/30 bg-violet-500/10 px-4 py-3 text-sm text-violet-200 transition hover:border-violet-400/40 hover:bg-violet-500/15 sm:flex-none"
                 >
                   <RefreshCcw className="h-4 w-4" />
                   Refresh
@@ -243,9 +243,9 @@ function ProtocolStat({
   value: string;
 }) {
   return (
-    <div className="grid min-h-[72px] gap-2 rounded-[var(--r-md)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] px-3 py-3">
+    <div className="grid min-h-[68px] gap-2 rounded-[var(--r-md)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] px-3 py-3">
       <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-[color:var(--text-tertiary)]">{label}</p>
-      <p className="break-words font-mono text-base font-semibold leading-tight text-[color:var(--text-primary)]">{value}</p>
+      <p className="break-words font-mono text-sm font-semibold leading-tight text-[color:var(--text-primary)] sm:text-base">{value}</p>
     </div>
   );
 }
@@ -260,15 +260,15 @@ function SidebarBlock({
   items: Array<{ label: string; value: string; helper: string }>;
 }) {
   return (
-    <div className="rounded-[var(--r-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-1)] p-4">
+    <div className="rounded-[var(--r-lg)] border border-[color:var(--border-subtle)] bg-[color:var(--surface-1)] p-3.5 sm:p-4">
       <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-[color:var(--text-tertiary)]">{eyebrow}</p>
-      <h3 className="mt-2 text-xl font-semibold text-[color:var(--text-primary)]">{title}</h3>
+      <h3 className="mt-2 text-lg font-semibold text-[color:var(--text-primary)] sm:text-xl">{title}</h3>
       <div className="mt-4 space-y-2">
         {items.map((item) => (
           <div key={`${item.label}-${item.value}`} className="rounded-[var(--r-md)] bg-[color:var(--surface-2)] px-3 py-3">
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex items-start justify-between gap-4">
               <p className="text-sm text-[color:var(--text-secondary)]">{item.label}</p>
-              <p className="font-mono text-base font-semibold text-[color:var(--text-primary)]">{item.value}</p>
+              <p className="font-mono text-sm font-semibold text-[color:var(--text-primary)] sm:text-base">{item.value}</p>
             </div>
             <p className="mt-1 text-xs text-[color:var(--text-tertiary)]">{item.helper}</p>
           </div>

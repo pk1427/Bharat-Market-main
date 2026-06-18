@@ -29,7 +29,7 @@ export function SectionHeader({
         </h2>
         {description ? <p className="max-w-2xl text-sm leading-6 text-[color:var(--text-secondary)]">{description}</p> : null}
       </div>
-      {action ? <div className="flex items-center gap-3">{action}</div> : null}
+      {action ? <div className="flex flex-wrap items-center gap-2 sm:justify-end">{action}</div> : null}
     </div>
   );
 }
