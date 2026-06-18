@@ -297,8 +297,8 @@ export function WalletBar() {
         </div>
 
         {menuOpen && isConnected && address ? (
-          <div className="relative lg:hidden">
-            <div className="absolute right-0 top-2 z-50 w-[min(320px,calc(100vw-1.25rem))] rounded-[var(--r-lg)] border border-[color:var(--border-default)] bg-[color:var(--surface-1)] p-3 shadow-[0_18px_70px_rgba(0,0,0,0.44)]">
+          <div className="mt-2 lg:hidden">
+            <div className="w-full rounded-[var(--r-lg)] border border-[color:var(--border-default)] bg-[color:var(--surface-1)] p-3 shadow-[0_18px_70px_rgba(0,0,0,0.44)]">
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-[color:var(--text-primary)]">Connected Wallet</p>

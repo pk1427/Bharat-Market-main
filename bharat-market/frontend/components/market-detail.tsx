@@ -221,15 +221,15 @@ export function MarketDetail({ address }: { address: string }) {
   const oracleTrustTone = oracleSettled ? "mint" : market.status === "awaiting" ? "gold" : "slate";
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Link href="/markets" className="inline-flex text-sm text-slate-400 transition hover:text-white">
           ← Back to markets
         </Link>
         <button
           type="button"
           onClick={() => void detail.refresh(true)}
-          className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs uppercase tracking-[0.25em] text-slate-300 transition hover:border-white/20 hover:text-white"
+          className="inline-flex w-full items-center justify-center rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs uppercase tracking-[0.25em] text-slate-300 transition hover:border-white/20 hover:text-white sm:w-auto"
         >
           Refresh Market
         </button>
@@ -237,8 +237,8 @@ export function MarketDetail({ address }: { address: string }) {
 
       <Panel glow className="surface-mask overflow-hidden rounded-[34px] p-0">
         <div className="grid xl:grid-cols-[minmax(0,1.35fr)_430px]">
-          <div className="space-y-8 px-6 py-7 sm:px-8 sm:py-8">
-            <div className="flex flex-wrap items-center gap-3">
+          <div className="space-y-6 px-4 py-5 sm:px-6 sm:py-7 lg:space-y-8 xl:px-8 xl:py-8">
+            <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
               <GlowBadge
                 label={market.statusLabel}
                 tone={market.status === "active" ? "mint" : market.status === "awaiting" ? "gold" : "coral"}
@@ -281,36 +281,36 @@ export function MarketDetail({ address }: { address: string }) {
               <motion.div
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="rounded-[32px] bg-[radial-gradient(circle_at_top_left,rgba(95,242,191,0.18),transparent_42%),linear-gradient(180deg,rgba(6,8,18,0.92),rgba(12,14,24,0.96))] p-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+                className="rounded-[28px] bg-[radial-gradient(circle_at_top_left,rgba(95,242,191,0.18),transparent_42%),linear-gradient(180deg,rgba(6,8,18,0.92),rgba(12,14,24,0.96))] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] sm:p-6"
               >
                 <p className="text-[10px] uppercase tracking-[0.38em] text-slate-500">Probability Terminal</p>
-                <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
+                <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_auto] lg:items-end">
                   <div className="space-y-4">
-                    <h1 className="font-heading max-w-5xl text-[3.2rem] leading-[0.92] tracking-[-0.05em] text-white sm:text-[4.8rem]">
+                    <h1 className="font-heading max-w-5xl text-[2.45rem] leading-[0.96] tracking-[-0.05em] text-white sm:text-[3.8rem] lg:text-[4.8rem]">
                       {market.question}
                     </h1>
-                    <p className="max-w-3xl text-sm leading-7 text-slate-400">
+                    <p className="max-w-3xl text-xs leading-6 text-slate-400 sm:text-sm sm:leading-7">
                       Market address {shortenAddress(market.address)} • Expires {formatTimestamp(market.endTime)}
                     </p>
-                    <p className="max-w-3xl text-sm leading-7 text-slate-300">{marketStateCopy}</p>
+                    <p className="max-w-3xl text-xs leading-6 text-slate-300 sm:text-sm sm:leading-7">{marketStateCopy}</p>
                   </div>
 
-                  <div className="text-right">
+                  <div className="text-left lg:text-right">
                     <div className="inline-flex items-center gap-2 rounded-full border border-mint/20 bg-mint/10 px-3 py-2 text-[11px] uppercase tracking-[0.22em] text-mint">
                       <TrendingUp className="h-3.5 w-3.5" />
                       {dominance} in control
                     </div>
-                    <p className="mt-4 font-mono text-[4.9rem] font-semibold leading-none tracking-tight text-mint sm:text-[6.6rem]">
+                    <p className="mt-4 font-mono text-[3.6rem] font-semibold leading-none tracking-tight text-mint sm:text-[5.4rem] lg:text-[6.6rem]">
                       {formatPercent(market.yesProbability)}
                     </p>
-                    <div className="mt-3 flex items-center justify-end gap-4 text-xs uppercase tracking-[0.3em]">
+                    <div className="mt-3 flex items-center gap-4 text-xs uppercase tracking-[0.3em] lg:justify-end">
                       <span className="text-mint">YES</span>
                       <span className="text-coral">{formatPercent(market.noProbability)} NO</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="mt-6 grid gap-3 lg:grid-cols-4">
+                <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   <InlineMetric label="Momentum" value={`${volatility}%`} helper="from neutral 50/50" tone="slate" />
                   <InlineMetric label="Volume" value={formatUsdc(market.volume)} helper="aggregate notional" tone="cyan" />
                   <InlineMetric label="Liquidity" value={formatUsdc(market.liquidity)} helper="pool depth" tone="gold" />
@@ -325,8 +325,8 @@ export function MarketDetail({ address }: { address: string }) {
             </div>
           </div>
 
-          <div className="border-t border-white/6 bg-black/15 px-6 py-7 sm:px-8 xl:border-l xl:border-t-0">
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
+            <div className="border-t border-white/6 bg-black/15 px-6 py-7 sm:px-8 xl:border-l xl:border-t-0">
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
               <MetricPanel
                 icon={Waves}
                 label="Oracle Route"
@@ -352,14 +352,14 @@ export function MarketDetail({ address }: { address: string }) {
       {market.oracleMetadata ? (
         <Panel className="overflow-hidden p-0">
           <div className="grid gap-0 lg:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)]">
-            <div className="relative overflow-hidden px-6 py-6">
+            <div className="relative overflow-hidden px-4 py-5 sm:px-6 sm:py-6">
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(95,242,191,0.14),transparent_45%)]" />
               <div className="relative">
                 <p className="text-[10px] uppercase tracking-[0.28em] text-mint">Oracle Transparency</p>
-                <h2 className="mt-3 font-heading text-4xl uppercase tracking-[-0.04em] text-white">
+                <h2 className="mt-3 font-heading text-3xl uppercase tracking-[-0.04em] text-white sm:text-4xl">
                   {oracleSettled ? "Settlement Verified" : "Settlement Pipeline Armed"}
                 </h2>
-                <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-300">
+                <p className="mt-3 max-w-2xl text-xs leading-6 text-slate-300 sm:text-sm sm:leading-7">
                   {market.oracleMetadata.settlementRule}
                 </p>
 
@@ -386,12 +386,12 @@ export function MarketDetail({ address }: { address: string }) {
               </div>
             </div>
 
-            <div className="border-t border-white/6 bg-black/15 p-5 lg:border-l lg:border-t-0">
-              <div className="rounded-[24px] border border-mint/15 bg-mint/[0.05] p-5">
+            <div className="border-t border-white/6 bg-black/15 p-4 sm:p-5 lg:border-l lg:border-t-0">
+              <div className="rounded-[24px] border border-mint/15 bg-mint/[0.05] p-4 sm:p-5">
                 <p className="text-[10px] uppercase tracking-[0.28em] text-mint">
                   {market.oracleMetadata.settlementPrice ? "Fetched Settlement Price" : "Fetched Settlement Result"}
                 </p>
-                <p className="mt-3 font-mono text-4xl font-semibold text-white">
+                <p className="mt-3 font-mono text-3xl font-semibold text-white sm:text-4xl">
                   {market.oracleMetadata.settlementPrice
                     ? formatSettlementPrice(market.oracleMetadata.settlementPrice)
                     : market.resolved
@@ -432,16 +432,16 @@ export function MarketDetail({ address }: { address: string }) {
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1.65fr)_minmax(355px,0.75fr)] xl:items-start">
         <div className="space-y-6">
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(260px,0.8fr)]">
-            <div className="rounded-[28px] bg-[linear-gradient(180deg,rgba(15,19,31,0.96),rgba(9,12,20,0.94))] px-5 py-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+            <div className="rounded-[28px] bg-[linear-gradient(180deg,rgba(15,19,31,0.96),rgba(9,12,20,0.94))] px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] sm:px-5 sm:py-5">
               <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.28em] text-slate-500">
                 <LineChart className="h-3.5 w-3.5 text-cyan-300" />
                 Chart, Flow, and Resolution
               </div>
-              <p className="mt-3 text-sm leading-7 text-slate-300">
+              <p className="mt-3 text-xs leading-6 text-slate-300 sm:text-sm sm:leading-7">
                 The chart is the center of this market. Use the movement curve, live tape, and snapshot metrics below to understand sentiment before you trade or wait for settlement.
               </p>
             </div>
-            <div className="rounded-[28px] bg-[linear-gradient(180deg,rgba(15,19,31,0.96),rgba(9,12,20,0.94))] px-5 py-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+            <div className="rounded-[28px] bg-[linear-gradient(180deg,rgba(15,19,31,0.96),rgba(9,12,20,0.94))] px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] sm:px-5 sm:py-5">
               <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">Probability Pulse</p>
               <div className="mt-4 flex items-center justify-between text-sm text-slate-400">
                 <span className="inline-flex items-center gap-2"><Dot className="h-4 w-4 text-mint" /> YES</span>
@@ -463,12 +463,12 @@ export function MarketDetail({ address }: { address: string }) {
           />
 
           <Panel className="overflow-hidden p-0">
-            <div className="border-b border-white/6 px-5 py-5">
-              <h2 className="font-heading text-2xl uppercase text-white">Market Snapshot</h2>
-              <p className="mt-2 text-sm text-slate-400">Live contract reads pulled from the deployed market.</p>
+            <div className="border-b border-white/6 px-4 py-4 sm:px-5 sm:py-5">
+              <h2 className="font-heading text-xl uppercase text-white sm:text-2xl">Market Snapshot</h2>
+              <p className="mt-2 text-xs text-slate-400 sm:text-sm">Live contract reads pulled from the deployed market.</p>
             </div>
 
-            <div className="grid gap-4 px-5 py-5 md:grid-cols-2">
+            <div className="grid gap-4 px-4 py-4 sm:px-5 sm:py-5 md:grid-cols-2">
               <DataRow label="YES Pool" value={formatUsdc(market.yesPool)} />
               <DataRow label="NO Pool" value={formatUsdc(market.noPool)} />
               <DataRow label="YES Token Balance" value={formatShares(market.yesBalance)} />
@@ -479,12 +479,12 @@ export function MarketDetail({ address }: { address: string }) {
           </Panel>
 
           <Panel className="overflow-hidden p-0">
-            <div className="border-b border-white/6 px-5 py-5">
-              <h2 className="font-heading text-2xl uppercase text-white">Redeem</h2>
-              <p className="mt-2 text-sm text-slate-400">Only holders of the winning side can redeem after resolution.</p>
+            <div className="border-b border-white/6 px-4 py-4 sm:px-5 sm:py-5">
+              <h2 className="font-heading text-xl uppercase text-white sm:text-2xl">Redeem</h2>
+              <p className="mt-2 text-xs text-slate-400 sm:text-sm">Only holders of the winning side can redeem after resolution.</p>
             </div>
 
-            <div className="space-y-5 px-5 py-5">
+            <div className="space-y-5 px-4 py-4 sm:px-5 sm:py-5">
               <div className="rounded-2xl bg-white/[0.04] p-4 text-sm text-slate-300">
                 <div className="flex items-center justify-between">
                   <span>Resolved</span>
@@ -533,13 +533,13 @@ export function MarketDetail({ address }: { address: string }) {
           </div>
         </div>
 
-        <div className="space-y-6 xl:sticky xl:top-28">
+        <div className="space-y-5 xl:sticky xl:top-28">
           <Panel glow className="overflow-hidden p-0">
-            <div className="border-b border-white/6 px-5 py-5">
+            <div className="border-b border-white/6 px-4 py-4 sm:px-5 sm:py-5">
               <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">Wallet Exposure</p>
-              <h3 className="mt-2 font-heading text-2xl uppercase text-white">Position Summary</h3>
+              <h3 className="mt-2 font-heading text-xl uppercase text-white sm:text-2xl">Position Summary</h3>
             </div>
-            <div className="grid gap-3 px-5 py-5 sm:grid-cols-3 xl:grid-cols-1">
+            <div className="grid gap-3 px-4 py-4 sm:grid-cols-3 sm:px-5 sm:py-5 xl:grid-cols-1">
               <MetricCard label="Wallet USDC" value={formatUsdc(market.usdcBalance)} helper="Available collateral" tone="slate" />
               <MetricCard label="YES Exposure" value={formatShares(market.yesBalance)} helper="Held YES shares" tone="mint" />
               <MetricCard label="NO Exposure" value={formatShares(market.noBalance)} helper="Held NO shares" tone="coral" />

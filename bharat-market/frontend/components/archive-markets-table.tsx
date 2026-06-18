@@ -68,7 +68,7 @@ export function ArchiveMarketsTable() {
           title="Past Markets"
           description="Review ended contracts, resolution state, and verification-ready market outcomes."
           action={
-            <p className="text-sm text-slate-500">
+            <p className="text-xs text-slate-500 sm:text-sm">
               Showing {rows.length} of {filtered.length} results
             </p>
           }
@@ -111,7 +111,7 @@ export function ArchiveMarketsTable() {
       </Panel>
 
       <Panel className="overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto md:block hidden">
           <table className="min-w-full border-collapse">
             <thead>
               <tr className="border-b border-white/8 bg-black/10">
@@ -160,9 +160,58 @@ export function ArchiveMarketsTable() {
             </tbody>
           </table>
         </div>
+
+        <div className="space-y-3 p-3 md:hidden">
+          {rows.map((market, index) => (
+            <div key={market.address} className="rounded-[20px] border border-white/8 bg-white/[0.03] p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
+                    #{filtered.length - ((page - 1) * PAGE_SIZE + index)} • {market.category}
+                  </p>
+                  <p className="mt-2 line-clamp-2 text-sm font-semibold text-white">{market.question}</p>
+                  <p className="mt-2 line-clamp-2 text-xs text-slate-500">
+                    {market.oracleMetadata?.externalId ?? market.oracleQuery}
+                  </p>
+                </div>
+                <StatusBadge
+                  label={market.statusLabel}
+                  tone={market.status === "resolved" ? "mint" : "gold"}
+                />
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-2 text-xs text-slate-400">
+                <MiniField label="Liquidity" value={formatUsdcCompact(market.liquidity)} />
+                <MiniField label="Volume" value={formatUsdcCompact(market.volume)} />
+                <MiniField label="Status" value={market.statusLabel} />
+                <MiniField label="Verification" value={market.oracleSource} />
+              </div>
+
+              <div className="mt-4 flex items-center justify-between gap-3">
+                <p className="text-xs text-slate-500">{market.endTimeLabel}</p>
+                <Link
+                  href={`/markets/${market.address}`}
+                  className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-slate-300 transition hover:border-violet-400/30 hover:text-white"
+                >
+                  Details
+                  <ArrowUpRight className="h-4 w-4" />
+                </Link>
+              </div>
+            </div>
+          ))}
+        </div>
       </Panel>
 
       <Pagination page={page} totalPages={totalPages} onChange={setPage} />
+    </div>
+  );
+}
+
+function MiniField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-[14px] border border-white/8 bg-black/20 px-3 py-2">
+      <p className="text-[9px] uppercase tracking-[0.2em] text-slate-500">{label}</p>
+      <p className="mt-1 text-xs font-medium text-white">{value}</p>
     </div>
   );
 }
