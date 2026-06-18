@@ -41,7 +41,7 @@ export function ActivityFeed({ marketAddress }: { marketAddress: string }) {
 
   if (activity.isLoading) {
     return (
-      <Panel className="p-5">
+      <Panel className="p-4 sm:p-5">
         <div className="space-y-3">
           {Array.from({ length: 4 }).map((_, index) => (
             <Skeleton key={index} className="h-20" />
@@ -57,7 +57,7 @@ export function ActivityFeed({ marketAddress }: { marketAddress: string }) {
 
   if (!activity.data || items.length === 0) {
     return (
-      <Panel className="p-5">
+      <Panel className="p-4 sm:p-5">
         <EmptyState
           title="No Activity Yet"
           description={
@@ -94,8 +94,8 @@ export function ActivityFeed({ marketAddress }: { marketAddress: string }) {
         }
       />
 
-      <div className="border-b border-white/6 px-5 pb-4">
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="border-b border-white/6 px-4 pb-4 sm:px-5">
+        <div className="mt-4 flex flex-wrap gap-2">
         {(["all", "trades", "liquidity", "resolution", "redeemed", "created"] as ActivityFilter[]).map(
           (item) => (
             <button
@@ -112,12 +112,12 @@ export function ActivityFeed({ marketAddress }: { marketAddress: string }) {
             </button>
           )
         )}
-      </div>
+        </div>
       </div>
 
-      <div className="space-y-3 px-5 py-5">
+      <div className="space-y-3 px-4 py-4 sm:px-5 sm:py-5">
         {warning ? (
-          <div className="rounded-2xl border border-gold/20 bg-gold/10 px-4 py-3 text-sm text-gold">
+          <div className="rounded-2xl border border-gold/20 bg-gold/10 px-4 py-3 text-xs text-gold sm:text-sm">
             Activity is temporarily using a degraded data path because indexed history is incomplete or Amoy RPC is limiting fallbacks.
           </div>
         ) : null}
@@ -140,12 +140,12 @@ export function ActivityFeed({ marketAddress }: { marketAddress: string }) {
                   <StatusBadge label={getActivityLabel(item.type)} tone={getActivityTone(item.type)} />
                   {item.whale ? <StatusBadge label="Whale Trade" tone="gold" /> : null}
                 </div>
-                <p className="text-sm text-slate-300">
+                <p className="text-xs leading-6 text-slate-300 sm:text-sm">
                   <span className="font-semibold text-white">{shortenAddress(item.actor)}</span> • {item.question}
                 </p>
                 <p className="text-xs text-slate-500">{formatRelativeTime(item.timestamp)}</p>
               </div>
-              <div className="text-right text-sm text-slate-300">
+              <div className="text-left text-xs text-slate-300 sm:text-right sm:text-sm">
                 {item.amount > 0n ? (
                   <p>
                     {getActivityAmountLabel(item)}: <span className="font-semibold text-white">{formatUsdc(item.amount)}</span>
@@ -158,7 +158,7 @@ export function ActivityFeed({ marketAddress }: { marketAddress: string }) {
                   <p className="text-xs text-mint">CoinGecko price {formatOraclePrice(item.settlementPrice)}</p>
                 ) : null}
                 {item.summary ? (
-                  <p className="max-w-[260px] text-xs text-slate-500">{item.summary}</p>
+                  <p className="max-w-full text-xs text-slate-500 sm:max-w-[260px]">{item.summary}</p>
                 ) : null}
                 <a
                   href={`https://amoy.polygonscan.com/tx/${item.txHash}`}

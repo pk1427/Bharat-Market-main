@@ -15,12 +15,12 @@ export function TxStatusNotice({
   const label = state === "pending" ? "Pending" : state === "success" ? "Confirmed" : "Failed";
 
   return (
-    <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4">
+    <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-4">
       <div className="flex flex-wrap items-center gap-2">
         <StatusBadge label={label} tone={tone} />
-        <span className="text-sm font-semibold text-white">{title}</span>
+        <span className="text-sm font-semibold text-white sm:text-base">{title}</span>
       </div>
-      {detail ? <p className="mt-2 text-sm text-slate-400">{detail}</p> : null}
+      {detail ? <p className="mt-2 text-xs text-slate-400 sm:text-sm">{detail}</p> : null}
     </div>
   );
 }

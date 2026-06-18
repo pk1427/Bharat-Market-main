@@ -46,12 +46,17 @@ export function WalletBar() {
   const { switchChainAsync, isPending: isSwitching } = useSwitchChain();
   const walletSummary = useWalletSummary();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const navRef = useRef<HTMLDivElement | null>(null);
 
   const metaMaskConnector =
+    connectors.find((connector) => connector.id === "metaMaskSDK") ??
     connectors.find((connector) => connector.name.toLowerCase().includes("metamask")) ??
     connectors[0];
+  const walletConnectConnector =
+    connectors.find((connector) => connector.id === "walletConnect") ?? connectors[1] ?? connectors[0];
 
   async function handleWalletClick() {
     if (isConnected) {
@@ -59,8 +64,12 @@ export function WalletBar() {
       return;
     }
 
-    if (metaMaskConnector) {
-      connect({ connector: metaMaskConnector });
+    const connector = /android|iphone|ipad|ipod/i.test(navigator.userAgent)
+      ? metaMaskConnector ?? walletConnectConnector
+      : metaMaskConnector ?? walletConnectConnector;
+
+    if (connector) {
+      connect({ connector });
     }
   }
 
@@ -77,18 +86,21 @@ export function WalletBar() {
 
   useEffect(() => {
     function handleOutsideClick(event: MouseEvent) {
-      if (!menuRef.current) return;
-      if (!menuRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (menuRef.current && !menuRef.current.contains(target)) {
         setMenuOpen(false);
+      }
+      if (navRef.current && !navRef.current.contains(target)) {
+        setNavOpen(false);
       }
     }
 
-    if (menuOpen) {
+    if (menuOpen || navOpen) {
       window.addEventListener("mousedown", handleOutsideClick);
     }
 
     return () => window.removeEventListener("mousedown", handleOutsideClick);
-  }, [menuOpen]);
+  }, [menuOpen, navOpen]);
 
   const balancePreview = walletSummary.data
     ? formatUsdc(walletSummary.data.usdcBalance)
@@ -117,21 +129,185 @@ export function WalletBar() {
               </div>
             </Link>
 
-            <div className="flex shrink-0 lg:hidden">
-              {isConnected && address ? (
+            <div className="flex shrink-0 items-center gap-2 lg:hidden">
+              <div ref={navRef} className="relative">
                 <button
                   type="button"
-                  onClick={() => setMenuOpen((value) => !value)}
-                  className="inline-flex items-center gap-2 rounded-full border border-[color:var(--accent-border)] bg-[rgba(7,7,13,0.72)] px-3 py-2 text-left"
+                  onClick={() => setNavOpen((value) => !value)}
+                  className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-subtle)] bg-[rgba(255,255,255,0.03)] px-3 py-2 text-xs font-semibold text-[color:var(--text-primary)] shadow-[0_10px_25px_rgba(0,0,0,0.14)]"
                 >
-                  <span className="font-mono text-xs font-semibold text-[color:var(--text-primary)]">{balancePreview}</span>
-                  <ChevronDown className={`h-4 w-4 text-[color:var(--text-tertiary)] transition ${menuOpen ? "rotate-180" : ""}`} />
+                  <LayoutGrid className="h-4 w-4 text-[color:var(--text-tertiary)]" />
+                  Menu
+                  <ChevronDown className={`h-4 w-4 text-[color:var(--text-tertiary)] transition ${navOpen ? "rotate-180" : ""}`} />
                 </button>
-              ) : null}
+
+                {navOpen ? (
+                  <div className="fixed inset-x-3 top-[74px] z-[60] rounded-[24px] border border-[color:var(--border-default)] bg-[color:var(--surface-1)] p-3 shadow-[0_18px_70px_rgba(0,0,0,0.52)] backdrop-blur-xl">
+                    <div className="flex items-center justify-between gap-3 border-b border-[color:var(--border-subtle)] pb-3">
+                      <div className="min-w-0">
+                        <p className="text-[10px] uppercase tracking-[0.24em] text-[color:var(--text-tertiary)]">Navigation</p>
+                        <p className="mt-1 text-sm font-semibold text-[color:var(--text-primary)]">Protocol sections</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setNavOpen(false)}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] text-[color:var(--text-secondary)]"
+                        aria-label="Close menu"
+                      >
+                        <ChevronDown className="h-4 w-4 rotate-180" />
+                      </button>
+                    </div>
+
+                    <div className="mt-3 grid gap-3">
+                      {navItems.map((item) => {
+                        const active =
+                          item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+                        const Icon = item.icon;
+                        return (
+                          <Link
+                            key={item.label}
+                            href={item.href}
+                            onClick={() => setNavOpen(false)}
+                            className={cn(
+                              "flex items-center gap-3 rounded-[18px] border px-4 py-3 text-sm font-semibold uppercase tracking-[0.12em] transition",
+                              active
+                                ? "border-[color:var(--accent-border)] bg-[color:var(--accent-dim)] text-[color:var(--text-primary)]"
+                                : "border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)]"
+                            )}
+                          >
+                            <Icon className="h-4 w-4 shrink-0" />
+                            <span>{item.label}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+
+                    <div className="mt-4 rounded-[20px] border border-[color:var(--border-subtle)] bg-[rgba(255,255,255,0.02)] p-3">
+                      {isConnected && address ? (
+                        <>
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-[10px] uppercase tracking-[0.24em] text-[color:var(--text-tertiary)]">Wallet</p>
+                              <p className="mt-1 truncate font-mono text-sm text-[color:var(--text-primary)]">{shortenAddress(address)}</p>
+                              <p className="mt-1 font-mono text-xs font-semibold text-[color:var(--text-secondary)]">{balancePreview}</p>
+                            </div>
+                            <span
+                              className={cn(
+                                "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-1 font-mono text-[10px] uppercase tracking-[0.12em]",
+                                onExpectedNetwork
+                                  ? "border-[color:var(--accent-border)] bg-[color:var(--accent-dim)] text-[color:var(--text-secondary)]"
+                                  : "border-[color:rgba(245,65,90,0.35)] bg-[color:var(--red-dim)] text-[color:var(--red)]"
+                              )}
+                            >
+                              <span className={cn("h-1.5 w-1.5 rounded-full", onExpectedNetwork ? "bg-[color:var(--accent)]" : "bg-[color:var(--red)]")} />
+                              {networkLabel}
+                            </span>
+                          </div>
+
+                          <div className="mt-3 grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={handleCopyAddress}
+                              className="inline-flex items-center justify-center gap-2 rounded-[14px] border border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] px-3 py-2.5 text-sm text-[color:var(--text-secondary)]"
+                            >
+                              <Copy className="h-4 w-4" />
+                              {copied ? "Copied" : "Copy"}
+                            </button>
+                            {!onExpectedNetwork ? (
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  await handleSwitchNetwork();
+                                  setNavOpen(false);
+                                }}
+                                disabled={isSwitching}
+                                className="inline-flex items-center justify-center gap-2 rounded-[14px] border border-coral/30 bg-coral/10 px-3 py-2.5 text-sm font-semibold text-coral"
+                              >
+                                <TriangleAlert className="h-4 w-4" />
+                                Switch
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  disconnect();
+                                  setNavOpen(false);
+                                }}
+                                className="inline-flex items-center justify-center gap-2 rounded-[14px] border border-[color:var(--border-default)] bg-[color:var(--surface-2)] px-3 py-2.5 text-sm font-semibold text-[color:var(--text-primary)]"
+                              >
+                                <LogOut className="h-4 w-4" />
+                                Disconnect
+                              </button>
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        <ActionButton
+                          type="button"
+                          onClick={handleWalletClick}
+                          disabled={isPending}
+                          tone="gold"
+                          className="w-full justify-center px-4 py-2.5"
+                        >
+                          {isPending ? "Connecting..." : "Connect Wallet"}
+                        </ActionButton>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+
             </div>
           </div>
 
-          <nav className="order-3 -mx-1 flex touch-pan-x items-center gap-1 overflow-x-auto pb-1 [scrollbar-width:none] lg:order-none lg:mx-0 lg:justify-center lg:gap-8 lg:overflow-visible lg:pb-0 [&::-webkit-scrollbar]:hidden">
+          <div className="lg:hidden">
+            {isConnected && address ? (
+              <button
+                type="button"
+                onClick={() => setMenuOpen((value) => !value)}
+                className="mt-2 grid w-full gap-2 rounded-[18px] border border-[color:var(--accent-border)] bg-[rgba(7,7,13,0.72)] px-3 py-3 text-left shadow-[0_10px_25px_rgba(0,0,0,0.18)]"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[color:var(--border-default)] bg-[color:var(--surface-2)]">
+                      <Shield className="h-3.5 w-3.5 text-[color:var(--text-tertiary)]" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate font-mono text-[10px] uppercase leading-none tracking-[0.14em] text-[color:var(--text-primary)]">
+                        {shortenAddress(address)}
+                      </span>
+                      <span className="mt-1 block font-mono text-[9px] uppercase tracking-[0.14em] text-[color:var(--text-tertiary)]">
+                        Balance {balancePreview}
+                      </span>
+                    </span>
+                  </span>
+                  <span
+                    className={cn(
+                      "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-1 font-mono text-[9px] uppercase tracking-[0.14em]",
+                      onExpectedNetwork
+                        ? "border-[color:var(--accent-border)] bg-[color:var(--accent-dim)] text-[color:var(--text-secondary)]"
+                        : "border-[color:rgba(245,65,90,0.35)] bg-[color:var(--red-dim)] text-[color:var(--red)]"
+                    )}
+                  >
+                    <span className={cn("h-1.5 w-1.5 rounded-full", onExpectedNetwork ? "bg-[color:var(--accent)]" : "bg-[color:var(--red)]")} />
+                    {networkLabel}
+                  </span>
+                </div>
+              </button>
+            ) : (
+              <ActionButton
+                type="button"
+                onClick={handleWalletClick}
+                disabled={isPending}
+                tone="gold"
+                className="mt-2 w-full justify-center px-4 py-2.5"
+              >
+                {isPending ? "Connecting..." : "Connect Wallet"}
+              </ActionButton>
+            )}
+          </div>
+
+          <nav className="hidden items-center justify-center gap-8 lg:flex">
             {navItems.map((item) => {
               const active =
                 item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
@@ -142,7 +318,7 @@ export function WalletBar() {
                   key={item.label}
                   href={item.href}
                   className={cn(
-                    "group relative inline-flex h-10 shrink-0 items-center gap-2 rounded-[var(--r-md)] px-3 text-[11px] font-bold uppercase tracking-[0.14em] transition sm:text-[12px] lg:h-[70px] lg:rounded-none lg:px-0",
+                    "group relative inline-flex h-9 shrink-0 items-center gap-2 rounded-full px-3 text-[10px] font-bold uppercase tracking-[0.14em] transition sm:text-[11px] lg:h-[70px] lg:rounded-none lg:px-0",
                     active
                       ? "bg-[color:var(--surface-2)] text-[color:var(--text-primary)] lg:bg-transparent"
                       : "text-[color:var(--text-secondary)] hover:bg-[color:var(--surface-2)] hover:text-[color:var(--text-primary)] lg:hover:bg-transparent"
@@ -290,7 +466,7 @@ export function WalletBar() {
                 tone="gold"
                 className="min-w-[170px] px-4 py-2.5"
               >
-                {isPending ? "Connecting..." : "Connect MetaMask"}
+                {isPending ? "Connecting..." : "Connect Wallet"}
               </ActionButton>
             )}
           </div>
@@ -380,7 +556,7 @@ export function WalletBar() {
               tone="gold"
               className="justify-center px-4 py-2.5"
             >
-              {isPending ? "Connecting..." : "Connect MetaMask"}
+              {isPending ? "Connecting..." : "Connect Wallet"}
             </ActionButton>
           </div>
         ) : null}

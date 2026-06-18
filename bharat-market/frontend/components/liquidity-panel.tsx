@@ -301,18 +301,18 @@ export function LiquidityPanel({
   return (
     <Panel className="overflow-hidden p-0">
       <div>
-        <div className="border-b border-white/6 px-5 py-5">
+        <div className="border-b border-white/6 px-4 py-4 sm:px-5 sm:py-5">
           <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">Liquidity</p>
-          <h3 className="mt-2 font-heading text-2xl uppercase text-white">
+          <h3 className="mt-2 font-heading text-xl uppercase text-white sm:text-2xl">
             Liquidity
           </h3>
-          <p className="mt-2 text-sm text-slate-400">
+          <p className="mt-2 text-xs text-slate-400 sm:text-sm">
             Optional LP controls for supplying and withdrawing USDC from the pool.
           </p>
         </div>
       </div>
 
-      <div className="space-y-5 px-5 py-5">
+      <div className="space-y-4 px-4 py-4 sm:space-y-5 sm:px-5 sm:py-5">
       <label className="block text-sm text-slate-300">
         Add liquidity in USDC
         <input
@@ -328,9 +328,9 @@ export function LiquidityPanel({
           <span>Your LP balance</span>
           <span className="font-semibold text-white">{formatShares(lpBalance)}</span>
         </div>
-        <div className="mt-2 flex items-center justify-between gap-4">
+        <div className="mt-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
           <span>LP token</span>
-          <span className="truncate font-mono text-xs text-slate-400">{lpTokenAddress}</span>
+          <span className="break-all font-mono text-[11px] text-slate-400 sm:truncate sm:text-xs">{lpTokenAddress}</span>
         </div>
       </div>
 

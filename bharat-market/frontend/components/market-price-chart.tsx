@@ -67,17 +67,17 @@ export function MarketPriceChart({
 
   return (
     <Panel className="overflow-hidden p-0">
-      <div className="border-b border-white/6 px-6 py-5">
+      <div className="border-b border-white/6 px-4 py-4 sm:px-6 sm:py-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div>
+          <div>
             <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">Market Curve</p>
-            <h3 className="mt-2 font-heading text-[2.35rem] uppercase leading-none text-white">Price History</h3>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">
+            <h3 className="mt-2 font-heading text-[clamp(1.8rem,7vw,2.35rem)] uppercase leading-none text-white">Price History</h3>
+            <p className="mt-3 max-w-2xl text-xs leading-6 text-slate-400 sm:text-sm">
               Event-backed YES and NO probability history with live backend snapshots layered in for a more stable terminal view.
             </p>
-        </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-[11px] uppercase tracking-[0.22em] text-slate-300">
+          </div>
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <div className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-[10px] uppercase tracking-[0.18em] text-slate-300 sm:text-[11px] sm:tracking-[0.22em]">
               {delta > 0 ? `YES +${delta.toFixed(1)}%` : delta < 0 ? `YES ${delta.toFixed(1)}%` : "YES flat"}
             </div>
             <div className="flex gap-2">
@@ -86,7 +86,7 @@ export function MarketPriceChart({
               key={item}
               type="button"
               onClick={() => onRangeChange(item)}
-                  className={`rounded-full px-3 py-2 text-xs uppercase tracking-[0.25em] transition ${
+                  className={`rounded-full px-3 py-2 text-[10px] uppercase tracking-[0.18em] transition sm:text-xs sm:tracking-[0.25em] ${
                 range === item
                     ? "bg-gold/15 text-gold"
                     : "border border-white/10 bg-white/5 text-slate-400"
@@ -100,7 +100,7 @@ export function MarketPriceChart({
         </div>
       </div>
 
-      <div className="grid gap-0 border-b border-white/6 md:grid-cols-4">
+      <div className="grid gap-0 border-b border-white/6 grid-cols-2 md:grid-cols-4">
         <Metric label="Latest YES" value={latest ? `${latest.yes.toFixed(1)}%` : "--"} tone="mint" />
         <Metric label="Latest NO" value={latest ? `${latest.no.toFixed(1)}%` : "--"} tone="coral" />
         <Metric label="Volume" value={latest ? latest.volumeLabel : "--"} tone="slate" />
@@ -113,8 +113,8 @@ export function MarketPriceChart({
         </div>
       ) : null}
 
-      <div className="px-4 pb-4 pt-5 sm:px-6 sm:pb-6">
-        <div className="h-[26rem] sm:h-[30rem]">
+      <div className="px-3 pb-4 pt-4 sm:px-6 sm:pb-6 sm:pt-5">
+        <div className="h-[19rem] sm:h-[30rem]">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={filtered}>
             <defs>
@@ -186,9 +186,9 @@ function Metric({
   };
 
   return (
-    <div className="px-6 py-5 md:border-r md:border-white/6 last:md:border-r-0">
+    <div className="px-4 py-4 md:border-r md:border-white/6 last:md:border-r-0 sm:px-6 sm:py-5">
       <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">{label}</p>
-      <p className={`mt-3 font-mono text-[1.85rem] font-semibold ${toneStyles[tone]}`}>{value}</p>
+      <p className={`mt-2 font-mono text-2xl font-semibold ${toneStyles[tone]} sm:mt-3 sm:text-[1.85rem]`}>{value}</p>
     </div>
   );
 }

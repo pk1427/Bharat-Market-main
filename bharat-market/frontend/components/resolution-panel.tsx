@@ -144,17 +144,17 @@ export function ResolutionPanel({
         : "Ready to request";
 
   return (
-    <Panel className="p-5">
+    <Panel className="p-4 sm:p-5">
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-[10px] uppercase tracking-[0.28em] text-gold">Oracle Settlement</p>
-          <h3 className="mt-2 font-heading text-2xl uppercase text-white">Resolution</h3>
+          <h3 className="mt-2 font-heading text-xl uppercase text-white sm:text-2xl">Resolution</h3>
         </div>
         <span className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-[10px] uppercase tracking-[0.22em] text-slate-300">
           {resolutionState}
         </span>
       </div>
-      <p className="mt-2 text-sm leading-6 text-slate-300">
+      <p className="mt-2 text-xs leading-6 text-slate-300 sm:text-sm">
         {marketResolved
           ? "Chainlink Functions has finalized this market. Redemption is now governed by the winning outcome shown above."
           : "After expiry, Chainlink Functions fetches the configured provider data, returns the deterministic outcome, and unlocks redemption."}
@@ -233,7 +233,7 @@ function ResolutionStep({
   active: boolean;
 }) {
   return (
-    <div className={`rounded-2xl border px-4 py-3 ${
+    <div className={`min-w-0 rounded-2xl border px-3 py-3 sm:px-4 sm:py-3 ${
       active ? "border-mint/20 bg-mint/[0.05]" : "border-white/10 bg-white/[0.035]"
     }`}>
       <div className="flex items-center justify-between gap-3">
@@ -241,7 +241,7 @@ function ResolutionStep({
           <Icon className={active ? "h-4 w-4 text-mint" : "h-4 w-4 text-slate-500"} />
           {label}
         </span>
-        <span className="text-sm font-semibold text-white">{value}</span>
+        <span className="break-words text-right text-sm font-semibold text-white">{value}</span>
       </div>
     </div>
   );

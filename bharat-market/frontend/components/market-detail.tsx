@@ -237,7 +237,7 @@ export function MarketDetail({ address }: { address: string }) {
 
       <Panel glow className="surface-mask overflow-hidden rounded-[34px] p-0">
         <div className="grid xl:grid-cols-[minmax(0,1.35fr)_430px]">
-          <div className="space-y-6 px-4 py-5 sm:px-6 sm:py-7 lg:space-y-8 xl:px-8 xl:py-8">
+          <div className="min-w-0 space-y-6 px-4 py-5 sm:px-6 sm:py-7 lg:space-y-8 xl:px-8 xl:py-8">
             <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
               <GlowBadge
                 label={market.statusLabel}
@@ -286,13 +286,13 @@ export function MarketDetail({ address }: { address: string }) {
                 <p className="text-[10px] uppercase tracking-[0.38em] text-slate-500">Probability Terminal</p>
                 <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_auto] lg:items-end">
                   <div className="space-y-4">
-                    <h1 className="font-heading max-w-5xl text-[2.45rem] leading-[0.96] tracking-[-0.05em] text-white sm:text-[3.8rem] lg:text-[4.8rem]">
+                    <h1 className="max-w-5xl break-words font-heading text-[clamp(2rem,8vw,4.8rem)] leading-[0.96] tracking-[-0.05em] text-white">
                       {market.question}
                     </h1>
-                    <p className="max-w-3xl text-xs leading-6 text-slate-400 sm:text-sm sm:leading-7">
+                    <p className="max-w-3xl break-words text-xs leading-6 text-slate-400 sm:text-sm sm:leading-7">
                       Market address {shortenAddress(market.address)} • Expires {formatTimestamp(market.endTime)}
                     </p>
-                    <p className="max-w-3xl text-xs leading-6 text-slate-300 sm:text-sm sm:leading-7">{marketStateCopy}</p>
+                    <p className="max-w-3xl break-words text-xs leading-6 text-slate-300 sm:text-sm sm:leading-7">{marketStateCopy}</p>
                   </div>
 
                   <div className="text-left lg:text-right">
@@ -300,7 +300,7 @@ export function MarketDetail({ address }: { address: string }) {
                       <TrendingUp className="h-3.5 w-3.5" />
                       {dominance} in control
                     </div>
-                    <p className="mt-4 font-mono text-[3.6rem] font-semibold leading-none tracking-tight text-mint sm:text-[5.4rem] lg:text-[6.6rem]">
+                    <p className="mt-4 font-mono text-[clamp(3rem,15vw,6.6rem)] font-semibold leading-none tracking-tight text-mint">
                       {formatPercent(market.yesProbability)}
                     </p>
                     <div className="mt-3 flex items-center gap-4 text-xs uppercase tracking-[0.3em] lg:justify-end">
@@ -318,14 +318,14 @@ export function MarketDetail({ address }: { address: string }) {
                 </div>
               </motion.div>
 
-              <div className="grid gap-4">
+              <div className="hidden gap-4 xl:grid">
                 <MetricCard label="YES" value={formatPercent(market.yesProbability)} helper="probability" tone="mint" />
                 <MetricCard label="NO" value={formatPercent(market.noProbability)} helper="probability" tone="coral" />
               </div>
             </div>
           </div>
 
-            <div className="border-t border-white/6 bg-black/15 px-6 py-7 sm:px-8 xl:border-l xl:border-t-0">
+            <div className="border-t border-white/6 bg-black/15 px-4 py-5 sm:px-6 sm:py-6 xl:border-l xl:border-t-0">
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
               <MetricPanel
                 icon={Waves}
@@ -430,7 +430,7 @@ export function MarketDetail({ address }: { address: string }) {
       ) : null}
 
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1.65fr)_minmax(355px,0.75fr)] xl:items-start">
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(260px,0.8fr)]">
             <div className="rounded-[28px] bg-[linear-gradient(180deg,rgba(15,19,31,0.96),rgba(9,12,20,0.94))] px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] sm:px-5 sm:py-5">
               <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.28em] text-slate-500">
@@ -528,12 +528,9 @@ export function MarketDetail({ address }: { address: string }) {
             </div>
           </Panel>
 
-          <div id="activity">
-            <ActivityFeed marketAddress={market.address} />
-          </div>
         </div>
 
-        <div className="space-y-5 xl:sticky xl:top-28">
+        <div className="min-w-0 space-y-5 xl:sticky xl:top-28">
           <Panel glow className="overflow-hidden p-0">
             <div className="border-b border-white/6 px-4 py-4 sm:px-5 sm:py-5">
               <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">Wallet Exposure</p>
@@ -571,15 +568,19 @@ export function MarketDetail({ address }: { address: string }) {
           />
         </div>
       </section>
+
+      <div id="activity">
+        <ActivityFeed marketAddress={market.address} />
+      </div>
     </div>
   );
 }
 
 function DataRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl bg-slate-950/30 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+    <div className="min-w-0 rounded-2xl bg-slate-950/30 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] sm:p-4">
       <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">{label}</p>
-      <p className="mt-3 break-words text-lg font-semibold text-white">{value}</p>
+      <p className="mt-2 break-words text-sm font-semibold text-white sm:mt-3 sm:text-lg">{value}</p>
     </div>
   );
 }
@@ -596,12 +597,12 @@ function OracleStep({
   active: boolean;
 }) {
   return (
-    <div className={`rounded-[20px] border px-4 py-4 ${
+    <div className={`min-w-0 rounded-[20px] border px-3 py-3 sm:px-4 sm:py-4 ${
       active ? "border-mint/20 bg-mint/[0.06]" : "border-white/8 bg-white/[0.035]"
     }`}>
       <Icon className={`h-4 w-4 ${active ? "text-mint" : "text-slate-500"}`} />
-      <p className="mt-3 text-[10px] uppercase tracking-[0.24em] text-slate-500">{label}</p>
-      <p className="mt-2 text-sm font-semibold text-white">{value}</p>
+      <p className="mt-3 text-[9px] uppercase tracking-[0.22em] text-slate-500 sm:text-[10px]">{label}</p>
+      <p className="mt-2 break-words text-sm font-semibold text-white">{value}</p>
     </div>
   );
 }
@@ -638,13 +639,13 @@ function MetricPanel({
   helper?: string;
 }) {
   return (
-    <div className="rounded-[24px] bg-white/[0.05] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+    <div className="min-w-0 rounded-[24px] bg-white/[0.05] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] sm:p-4">
       <div className="flex items-center gap-2 text-slate-500">
         <Icon className="h-4 w-4" />
         <p className="text-[10px] uppercase tracking-[0.3em]">{label}</p>
       </div>
-      <p className="mt-3 font-mono text-lg font-semibold text-white">{value}</p>
-      {helper ? <p className="mt-2 text-xs text-slate-400">{helper}</p> : null}
+      <p className="mt-3 break-words font-mono text-sm font-semibold text-white sm:text-lg">{value}</p>
+      {helper ? <p className="mt-2 break-words text-xs text-slate-400">{helper}</p> : null}
     </div>
   );
 }
@@ -667,10 +668,10 @@ function InlineMetric({
   };
 
   return (
-    <div className="rounded-[18px] bg-black/18 px-4 py-3">
+    <div className="min-w-0 rounded-[18px] bg-black/18 px-3 py-3 sm:px-4">
       <p className="text-[10px] uppercase tracking-[0.26em] text-slate-500">{label}</p>
-      <p className={`mt-2 font-mono text-xl font-semibold ${tones[tone]}`}>{value}</p>
-      <p className="mt-1 text-xs text-slate-500">{helper}</p>
+      <p className={`mt-2 break-words font-mono text-base font-semibold ${tones[tone]} sm:text-xl`}>{value}</p>
+      <p className="mt-1 break-words text-xs text-slate-500">{helper}</p>
     </div>
   );
 }

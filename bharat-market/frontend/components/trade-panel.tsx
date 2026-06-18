@@ -335,15 +335,15 @@ export function TradePanel({
   return (
     <Panel glow className="overflow-hidden p-0">
       <div>
-        <div className="border-b border-white/6 px-5 py-5">
+        <div className="border-b border-white/6 px-4 py-4 sm:px-5 sm:py-5">
           <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">Execution</p>
-          <h3 className="mt-2 font-heading text-2xl uppercase text-white">Trade</h3>
-          <p className="mt-2 text-sm text-slate-400">Terminal-grade order entry with live preview, approval state, and payout context.</p>
+          <h3 className="mt-2 font-heading text-xl uppercase text-white sm:text-2xl">Trade</h3>
+          <p className="mt-2 text-xs text-slate-400 sm:text-sm">Terminal-grade order entry with live preview, approval state, and payout context.</p>
         </div>
       </div>
 
-      <div className="space-y-5 px-5 py-5">
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="space-y-4 px-4 py-4 sm:space-y-5 sm:px-5 sm:py-5">
+        <div className="grid gap-3 sm:grid-cols-2">
         <motion.button
           type="button"
           onClick={() => setSide("yes")}
@@ -372,13 +372,13 @@ export function TradePanel({
         </motion.button>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
         {quickAmounts.map((quick) => (
           <button
             key={quick}
             type="button"
             onClick={() => setAmount(quick)}
-            className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-[10px] uppercase tracking-[0.28em] text-slate-300 transition hover:border-cyan-400/25 hover:text-white"
+            className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-[10px] uppercase tracking-[0.22em] text-slate-300 transition hover:border-cyan-400/25 hover:text-white sm:tracking-[0.28em]"
           >
             {quick} USDC
           </button>
@@ -395,7 +395,7 @@ export function TradePanel({
         />
       </label>
 
-      <div className="grid gap-3 rounded-[24px] bg-white/[0.04] p-4 text-sm text-slate-300">
+        <div className="grid gap-2 rounded-[24px] bg-white/[0.04] p-4 text-sm text-slate-300 sm:gap-3">
         <div className="flex items-center justify-between">
           <span>Previewed shares</span>
           <span className="font-semibold text-white">
@@ -420,7 +420,7 @@ export function TradePanel({
         <TxStatusNotice
           state="pending"
           title="Wallet connection required"
-          detail="Connect MetaMask to approve USDC and place a trade."
+          detail="Connect your wallet to approve USDC and place a trade."
         />
       ) : null}
       {disabled ? (

@@ -24,7 +24,10 @@ export function WalletRequiredGate({
   const { connectors, connect, isPending } = useConnect();
   const { switchChainAsync, isPending: isSwitching } = useSwitchChain();
   const connector =
-    connectors.find((item) => item.name.toLowerCase().includes("metamask")) ?? connectors[0];
+    connectors.find((item) => item.id === "metaMaskSDK") ??
+    connectors.find((item) => item.name.toLowerCase().includes("metamask")) ??
+    connectors.find((item) => item.id === "walletConnect") ??
+    connectors[0];
   const onExpectedNetwork = chainId === polygonAmoy.id;
 
   if (isConnected && onExpectedNetwork) {
@@ -57,7 +60,7 @@ export function WalletRequiredGate({
                   onClick={() => connector && connect({ connector })}
                   className="min-w-[190px]"
                 >
-                  {isPending ? "Connecting..." : "Connect MetaMask"}
+                  {isPending ? "Connecting..." : "Connect Wallet"}
                 </ActionButton>
               ) : (
                 <ActionButton
